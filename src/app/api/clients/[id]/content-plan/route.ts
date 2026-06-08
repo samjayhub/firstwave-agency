@@ -2,6 +2,7 @@ import { z } from "zod";
 import { handle, ok, readJson } from "@/app/api/_lib/respond";
 import { requireRequestAuth } from "@/app/api/_lib/deps";
 import { assertSameOrigin } from "@/app/api/_lib/csrf";
+import { contentPlanLimiter, enforceLimit } from "@/app/api/_lib/rate-limit";
 import { getPrisma } from "@/lib/db/prisma";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import {
@@ -47,6 +48,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   return handle(async () => {
     assertSameOrigin(req);
     const auth = requireRequestAuth();
+    await enforceLimit(contentPlanLimiter, `plan:${auth.ctx.agencyId}:${params.id}`);
     const body = BodySchema.safeParse(await readJson(req));
     if (!body.success) throw new ValidationError(body.error.issues[0]?.message);
 

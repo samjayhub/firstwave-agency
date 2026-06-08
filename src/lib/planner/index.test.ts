@@ -45,6 +45,19 @@ describe("parsePlan", () => {
   it("throws when nothing usable is produced", () => {
     expect(() => parsePlan("[]", 30, ["linkedin"])).toThrow();
   });
+
+  it("caps the number of items at days * platforms (anti-DoS)", () => {
+    const many = JSON.stringify(
+      Array.from({ length: 100 }, () => ({
+        day: 1,
+        platform: "linkedin",
+        pillar: "p",
+        format: "text",
+        idea: "i",
+      })),
+    );
+    expect(parsePlan(many, 2, ["linkedin"])).toHaveLength(2); // 2 days * 1 platform
+  });
 });
 
 describe("ContentPlannerService.generate", () => {

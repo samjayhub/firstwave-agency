@@ -29,6 +29,10 @@ export interface ContentPlanResult {
   items: Array<{ contentItemId: string; brief: PlanItemBrief }>;
 }
 
+// NOTE: these methods scope by clientId only and assume the CALLER has already
+// verified the client belongs to the agency (ContentPlannerService does this via
+// clients.get before invoking them). Do not call directly from a request without
+// that ownership check.
 export interface ContentPlanStore {
   createPlanWithItems(
     clientId: string,
@@ -77,8 +81,11 @@ export function parsePlan(
   platforms: Platform[],
 ): PlanItemBrief[] {
   const allowed = new Set<string>(platforms);
+  // Hard upper bound so a runaway model can't create an unbounded number of rows.
+  const maxItems = days * platforms.length;
   const items: PlanItemBrief[] = [];
   for (const entry of extractJsonArray(raw)) {
+    if (items.length >= maxItems) break;
     const parsed = PlanItemSchema.safeParse(entry);
     if (!parsed.success) continue;
     const { day, platform, pillar, format, idea } = parsed.data;

@@ -1,6 +1,7 @@
 import { handle, ok } from "@/app/api/_lib/respond";
 import { requireRequestAuth } from "@/app/api/_lib/deps";
 import { assertSameOrigin } from "@/app/api/_lib/csrf";
+import { copyGenLimiter, enforceLimit } from "@/app/api/_lib/rate-limit";
 import { getPrisma } from "@/lib/db/prisma";
 import {
   prismaBrandProfileStore,
@@ -27,6 +28,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   return handle(async () => {
     assertSameOrigin(req);
     const auth = requireRequestAuth();
+    await enforceLimit(copyGenLimiter, `copy:${auth.ctx.agencyId}:${params.id}`);
     const generated = await copyEngine().write(auth.ctx, params.id);
     return ok({ copy: generated }, 201);
   });

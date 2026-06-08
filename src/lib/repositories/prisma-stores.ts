@@ -3,6 +3,7 @@
 // pins the returned shape to the record type the repository expects.
 import type { PrismaClient } from "@prisma/client";
 import type { ClientStore } from "./client-repository";
+import type { AgencyStore, UserStore } from "@/lib/auth/auth-service";
 
 const CLIENT_SELECT = {
   id: true,
@@ -24,5 +25,28 @@ export function prismaClientStore(prisma: PrismaClient): ClientStore {
       if (res.count === 0) return null;
       return prisma.client.findFirst({ where, select: CLIENT_SELECT });
     },
+  };
+}
+
+export function prismaAgencyStore(prisma: PrismaClient): AgencyStore {
+  return {
+    create: ({ name }) =>
+      prisma.agency.create({ data: { name }, select: { id: true, name: true } }),
+  };
+}
+
+const AUTH_USER_SELECT = {
+  id: true,
+  agencyId: true,
+  email: true,
+  role: true,
+  passwordHash: true,
+} as const;
+
+export function prismaUserStore(prisma: PrismaClient): UserStore {
+  return {
+    create: (data) => prisma.user.create({ data, select: AUTH_USER_SELECT }),
+    findByEmail: (email) =>
+      prisma.user.findUnique({ where: { email }, select: AUTH_USER_SELECT }),
   };
 }

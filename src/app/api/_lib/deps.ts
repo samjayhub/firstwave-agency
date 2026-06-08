@@ -7,6 +7,7 @@ import { requireAuth, type AuthContext } from "@/lib/auth/guard";
 import { readSessionToken } from "@/lib/auth/session";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import {
+  prismaAnalyticsStore,
   prismaApprovalStore,
   prismaAuthStore,
   prismaClientStore,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/repositories/prisma-stores";
 import { ApprovalService } from "@/lib/approval";
 import { ConnectionService } from "@/lib/connections";
+import { AnalyticsService } from "@/lib/analytics";
 import { getPublisher } from "@/lib/publishers";
 
 export function authService(): AuthService {
@@ -40,6 +42,13 @@ export function connectionService(): ConnectionService {
 
 export function connectedAccountsRepository() {
   return prismaConnectedAccountRepository(getPrisma());
+}
+
+export function analyticsService(): AnalyticsService {
+  return new AnalyticsService({
+    store: prismaAnalyticsStore(getPrisma()),
+    resolvePublisher: getPublisher,
+  });
 }
 
 /** Authenticate the current request from its session cookie. */

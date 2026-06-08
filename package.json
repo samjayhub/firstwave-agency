@@ -1,0 +1,35 @@
+{
+  "name": "ai-social-marketing-platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agency-grade AI social media marketing platform (Phase 0 — spec + scaffold)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "worker": "tsx src/lib/queue/worker.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "@prisma/client": "^5.0.0",
+    "bullmq": "^5.0.0",
+    "ioredis": "^5.0.0",
+    "next": "^14.2.0",
+    "node-vibrant": "^3.2.1-alpha.1",
+    "playwright": "^1.45.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.3.0",
+    "prisma": "^5.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.5.0"
+  }
+}

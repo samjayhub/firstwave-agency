@@ -1,0 +1,213 @@
+// Data model sketch — see docs/03-data-model.md for full notes.
+// Phase 0: structure only. Refine types/indexes + enable pgvector during Phase 1.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // extensions = [vector]   // enable pgvector in Phase 1 (preview feature + migration)
+}
+
+// ── Tenancy ────────────────────────────────────────────────
+model Agency {
+  id        String   @id @default(cuid())
+  name      String
+  users     User[]
+  clients   Client[]
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id        String   @id @default(cuid())
+  agencyId  String
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+  email     String   @unique
+  role      Role
+  createdAt DateTime @default(now())
+
+  @@index([agencyId])
+}
+
+enum Role {
+  agency_admin
+  strategist
+  client_reviewer
+}
+
+model Client {
+  id           String             @id @default(cuid())
+  agencyId     String
+  agency       Agency             @relation(fields: [agencyId], references: [id])
+  name         String
+  websiteUrl   String?
+  niche        String?
+  brandProfile BrandProfile?
+  accounts     ConnectedAccount[]
+  competitors  Competitor[]
+  trends       Trend[]
+  plans        ContentPlan[]
+  createdAt    DateTime           @default(now())
+
+  @@index([agencyId])
+}
+
+// ── Brand intelligence ─────────────────────────────────────
+model BrandProfile {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  client      Client   @relation(fields: [clientId], references: [id])
+  voice       Json? // tone, themes, do/don't, audience (LLM-derived)
+  palette     Json? // [{hex, role}] from node-vibrant
+  fonts       Json? // [{family, role}] from @font-face parse
+  logoAssetId String?
+  // voiceEmbedding Unsupported("vector(1536)")?  // pgvector — Phase 1
+  updatedAt   DateTime @updatedAt
+}
+
+// ── Connected accounts (OAuth) ─────────────────────────────
+model ConnectedAccount {
+  id           String        @id @default(cuid())
+  clientId     String
+  client       Client        @relation(fields: [clientId], references: [id])
+  platform     Platform
+  handle       String?
+  accessToken  String // encrypted at rest
+  refreshToken String? // encrypted at rest
+  expiresAt    DateTime?
+  contentItems ContentItem[] // many-to-many targets
+  createdAt    DateTime      @default(now())
+
+  @@index([clientId])
+}
+
+enum Platform {
+  meta_ig
+  meta_fb
+  youtube
+  linkedin
+  tiktok
+  pinterest
+  x
+}
+
+// ── Competitor intelligence ────────────────────────────────
+model Competitor {
+  id        String              @id @default(cuid())
+  clientId  String
+  client    Client              @relation(fields: [clientId], references: [id])
+  platform  Platform
+  handle    String
+  url       String?
+  insights  CompetitorInsight[]
+  createdAt DateTime            @default(now())
+
+  @@index([clientId])
+}
+
+model CompetitorInsight {
+  id           String     @id @default(cuid())
+  competitorId String
+  competitor   Competitor @relation(fields: [competitorId], references: [id])
+  metric       Json // engagementRate, cadence, topFormats, hooks
+  capturedAt   DateTime   @default(now())
+}
+
+// ── Trends ─────────────────────────────────────────────────
+model Trend {
+  id         String   @id @default(cuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id])
+  platform   Platform
+  topic      String
+  signal     Json // volume, growth, sampleRefs
+  capturedAt DateTime @default(now())
+}
+
+// ── Content plan ───────────────────────────────────────────
+model ContentPlan {
+  id        String        @id @default(cuid())
+  clientId  String
+  client    Client        @relation(fields: [clientId], references: [id])
+  startDate DateTime
+  items     ContentItem[]
+  createdAt DateTime      @default(now())
+}
+
+model ContentItem {
+  id          String             @id @default(cuid())
+  planId      String
+  plan        ContentPlan        @relation(fields: [planId], references: [id])
+  scheduledAt DateTime?
+  copy        Json? // caption, hook, hashtags, description
+  status      ItemStatus         @default(draft)
+  assets      Asset[]
+  targets     ConnectedAccount[]
+  publishJobs PublishJob[]
+  createdAt   DateTime           @default(now())
+
+  @@index([planId])
+}
+
+enum ItemStatus {
+  draft
+  in_review
+  approved
+  scheduled
+  published
+  failed
+}
+
+// ── Assets ─────────────────────────────────────────────────
+model Asset {
+  id            String       @id @default(cuid())
+  contentItemId String?
+  contentItem   ContentItem? @relation(fields: [contentItemId], references: [id])
+  kind          AssetKind
+  url           String
+  source        AssetSource
+  meta          Json? // model, prompt, dimensions
+  createdAt     DateTime     @default(now())
+}
+
+enum AssetKind {
+  image
+  video
+  audio
+}
+
+enum AssetSource {
+  generated
+  lovart_manual
+  upload
+}
+
+// ── Publishing + analytics ─────────────────────────────────
+model PublishJob {
+  id            String              @id @default(cuid())
+  contentItemId String
+  contentItem   ContentItem         @relation(fields: [contentItemId], references: [id])
+  platform      Platform
+  externalId    String?
+  state         PublishState        @default(queued)
+  error         String?
+  snapshots     AnalyticsSnapshot[]
+  createdAt     DateTime            @default(now())
+}
+
+enum PublishState {
+  queued
+  posting
+  published
+  failed
+}
+
+model AnalyticsSnapshot {
+  id           String     @id @default(cuid())
+  publishJobId String
+  publishJob   PublishJob @relation(fields: [publishJobId], references: [id])
+  metrics      Json // impressions, likes, comments, shares, watchTime
+  capturedAt   DateTime   @default(now())
+}

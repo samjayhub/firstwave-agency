@@ -32,6 +32,7 @@ export interface BrandProfileData {
 export interface ExtractInput {
   clientId: string;
   websiteUrl: string;
-  /** Optional public social URLs to ground the voice analysis. */
+  /** TODO(phase-2): fetch + use public social URLs to ground the voice analysis.
+   *  Not consumed yet, so it is intentionally NOT accepted at the route boundary. */
   socialUrls?: string[];
 }

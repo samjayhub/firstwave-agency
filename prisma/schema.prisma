@@ -63,8 +63,9 @@ model BrandProfile {
   clientId    String   @unique
   client      Client   @relation(fields: [clientId], references: [id])
   voice       Json? // tone, themes, do/don't, audience (LLM-derived)
-  palette     Json? // [{hex, role}] from node-vibrant
+  palette     Json? // [{hex, role}] extracted from site CSS
   fonts       Json? // [{family, role}] from @font-face parse
+  logoUrl     String? // best-guess logo URL from the crawl
   logoAssetId String?
   // voiceEmbedding Unsupported("vector(1536)")?  // pgvector — Phase 1
   updatedAt   DateTime @updatedAt

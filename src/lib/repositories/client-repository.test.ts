@@ -57,6 +57,15 @@ describe("ClientRepository", () => {
     expect(new Set(allIds).size).toBe(5); // no duplicates across pages
   });
 
+  it("returns an empty page when the cursor row is not in the agency's set", async () => {
+    await repo.create(AGENCY_A, { name: "A1" });
+    const b = await repo.create(AGENCY_B, { name: "B1" });
+    // Page through agency A using a cursor that belongs to agency B.
+    const page = await repo.list(AGENCY_A, { limit: 10, cursor: b.id });
+    expect(page.items).toEqual([]);
+    expect(page.hasMore).toBe(false);
+  });
+
   it("scopes updates to the owning agency", async () => {
     const a = await repo.create(AGENCY_A, { name: "Acme" });
     await expect(

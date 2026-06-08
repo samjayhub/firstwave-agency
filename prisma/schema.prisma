@@ -1,5 +1,6 @@
-// Data model sketch — see docs/03-data-model.md for full notes.
-// Phase 0: structure only. Refine types/indexes + enable pgvector during Phase 1.
+// Data model — see docs/03-data-model.md for full notes.
+// Phase 1: models + initial migration are live. pgvector (brand/competitor
+// embeddings) is enabled in a later phase via a preview feature + migration.
 
 generator client {
   provider = "prisma-client-js"

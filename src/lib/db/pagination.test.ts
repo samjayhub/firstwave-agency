@@ -54,4 +54,25 @@ describe("toCursorPage", () => {
     expect(page.hasMore).toBe(false);
     expect(page.nextCursor).toBeNull();
   });
+
+  it("has no next page when rows equal exactly the limit", () => {
+    const page = toCursorPage(make(10), { limit: 10 });
+    expect(page.items).toHaveLength(10);
+    expect(page.hasMore).toBe(false);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it("handles limit=1 (over-fetch of 2 rows)", () => {
+    const page = toCursorPage(make(2), { limit: 1 });
+    expect(page.items).toHaveLength(1);
+    expect(page.hasMore).toBe(true);
+    expect(page.nextCursor).toBe("id_0");
+  });
+
+  it("is empty for an empty result set", () => {
+    const page = toCursorPage([], { limit: 10 });
+    expect(page.items).toEqual([]);
+    expect(page.hasMore).toBe(false);
+    expect(page.nextCursor).toBeNull();
+  });
 });

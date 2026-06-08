@@ -1,4 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
+import type { PrismaClient } from "@prisma/client";
 
 // Real-database integration. Runs ONLY when a Postgres is available and opted in:
 //   TEST_INTEGRATION=1 DATABASE_URL=postgres://... npm test
@@ -7,31 +8,43 @@ import { describe, it, expect, afterAll } from "vitest";
 const RUN = process.env.TEST_INTEGRATION === "1" && !!process.env.DATABASE_URL;
 
 describe.skipIf(!RUN)("[integration] Prisma + ClientRepository against real Postgres", () => {
-  // Imports are inside so the suite never loads PrismaClient when skipped.
+  let prisma: PrismaClient | undefined;
+  let createdId: string | undefined;
+  let agencyAId: string | undefined;
+  let agencyBId: string | undefined;
+
+  // Suite-scoped teardown so cleanup runs even if a test throws (M1 fix).
+  afterAll(async () => {
+    if (!prisma) return;
+    if (createdId) await prisma.client.deleteMany({ where: { id: createdId } });
+    const ids = [agencyAId, agencyBId].filter(Boolean) as string[];
+    if (ids.length) await prisma.agency.deleteMany({ where: { id: { in: ids } } });
+    await prisma.$disconnect();
+  });
+
   it("round-trips a client and enforces tenant isolation", async () => {
+    // Imported inside so the suite never loads PrismaClient when skipped.
     const { getPrisma } = await import("./prisma");
     const { ClientRepository } = await import("@/lib/repositories/client-repository");
     const { prismaClientStore } = await import("@/lib/repositories/prisma-stores");
 
-    const prisma = getPrisma();
+    prisma = getPrisma();
     const repo = new ClientRepository(prismaClientStore(prisma));
 
     const agencyA = await prisma.agency.create({ data: { name: "IT Agency A" } });
     const agencyB = await prisma.agency.create({ data: { name: "IT Agency B" } });
+    agencyAId = agencyA.id;
+    agencyBId = agencyB.id;
 
     const created = await repo.create({ agencyId: agencyA.id }, { name: "IT Client" });
+    createdId = created.id;
+
     const got = await repo.get({ agencyId: agencyA.id }, created.id);
     expect(got.name).toBe("IT Client");
 
     await expect(
       repo.get({ agencyId: agencyB.id }, created.id),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
-
-    afterAll(async () => {
-      await prisma.client.deleteMany({ where: { id: created.id } });
-      await prisma.agency.deleteMany({ where: { id: { in: [agencyA.id, agencyB.id] } } });
-      await prisma.$disconnect();
-    });
   });
 });
 

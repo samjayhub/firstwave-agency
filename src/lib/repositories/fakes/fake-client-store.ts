@@ -43,7 +43,10 @@ export class FakeClientStore implements ClientStore {
 
     if (args.cursor) {
       const idx = rows.findIndex((r) => r.id === args.cursor!.id);
-      if (idx >= 0) rows = rows.slice(idx + (args.skip ?? 1));
+      // Match Prisma: a cursor not in the where-set yields an empty page, it does
+      // NOT restart from the top.
+      if (idx < 0) return [];
+      rows = rows.slice(idx + (args.skip ?? 1));
     }
     return rows.slice(0, args.take).map((r) => ({ ...r }));
   }

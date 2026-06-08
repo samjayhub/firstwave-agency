@@ -51,3 +51,12 @@ Multi-tenant agency data + stored OAuth tokens.
 - [ ] Business entity registered (for platform app review).
 - [ ] OAuth token encryption verified; no secrets in logs.
 - [ ] Rate-limit + backoff on every external call.
+
+## Auth security decisions (Phase 1)
+Documented trade-offs from the PR3 security review:
+- **CSRF:** session is an `HttpOnly`, `SameSite=Lax`, `Secure`-in-prod cookie. Mutating routes additionally enforce an Origin / `Sec-Fetch-Site` same-origin check (`src/app/api/_lib/csrf.ts`). A double-submit CSRF token is a planned hardening if we add cross-subdomain surfaces.
+- **Rate limiting:** login/signup are rate-limited per IP (and login per email) via an in-memory sliding window (`src/lib/security/rate-limiter.ts`). **Accepted limitation:** in-memory state is per-instance — move to the Redis-backed limiter before running more than one app instance.
+- **Login enumeration:** generic error message + a dummy `verify` on the no-user branch so response timing can't reveal whether an email is registered.
+- **Signup enumeration (accepted for MVP):** signup returns `409 CONFLICT` for an already-registered email, which reveals existence. Accepted for agency-onboarding UX; revisit with an email-verification flow if self-serve signup is opened broadly.
+- **Email uniqueness (follow-up):** uniqueness is global and enforced via app-level lowercase normalization; the DB column is not yet `citext`. Add a normalized unique index (or `citext`) so isolation does not depend solely on callers normalizing.
+- **Password hashing:** scrypt (node built-in), constant-time verify. Explicit cost parameters + a self-describing hash format are a planned follow-up to enable tuning/rotation.

@@ -4,8 +4,11 @@
 import { z } from "zod";
 import { withAudit, type AiAuditSink, type AiAuditMeta } from "@/lib/audit";
 import type { LlmProvider } from "@/lib/llm";
+import { extractJsonObject } from "@/lib/llm/json";
 import { ExternalServiceError } from "@/lib/errors/app-error";
 import type { BrandVoice } from "./types";
+
+export { extractJsonObject };
 
 const VoiceSchema = z.object({
   tone: z.array(z.string()).min(1),
@@ -25,23 +28,6 @@ const SYSTEM = [
 
 function buildPrompt(pageText: string): string {
   return `Website text (truncated):\n\n${pageText.slice(0, 8000)}`;
-}
-
-/** Pull the JSON object out of a model response — prefer a fenced block, then
- *  fall back to the outermost brace span (tolerates chatty prose). */
-export function extractJsonObject(raw: string): unknown {
-  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const body = fence ? fence[1]! : raw;
-  const start = body.indexOf("{");
-  const end = body.lastIndexOf("}");
-  if (start === -1 || end === -1 || end < start) {
-    throw new ExternalServiceError("Brand voice analysis returned no JSON");
-  }
-  try {
-    return JSON.parse(body.slice(start, end + 1));
-  } catch {
-    throw new ExternalServiceError("Brand voice analysis returned invalid JSON");
-  }
 }
 
 export function parseVoice(raw: string): BrandVoice {

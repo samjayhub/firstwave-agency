@@ -16,6 +16,11 @@ describe("extractJsonObject", () => {
     const raw = "Here you go:\n```json\n" + VALID + "\n```";
     expect(extractJsonObject(raw)).toMatchObject({ audience: expect.any(String) });
   });
+  it("prefers a fenced block even when prose has stray braces", () => {
+    const raw = "Use the {placeholder} token. Result:\n```json\n" + VALID + "\n```\nHope that helps {thanks}";
+    expect(extractJsonObject(raw)).toMatchObject({ audience: expect.any(String) });
+  });
+
   it("throws on responses with no JSON", () => {
     expect(() => extractJsonObject("no json here")).toThrow();
   });

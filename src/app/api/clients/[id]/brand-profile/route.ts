@@ -34,7 +34,6 @@ function service() {
 
 const BodySchema = z.object({
   websiteUrl: z.string().url().optional(),
-  socialUrls: z.array(z.string().url()).max(10).optional(),
 });
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
@@ -61,11 +60,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       throw new ValidationError("No websiteUrl provided and the client has none on file");
     }
 
-    const data = await service().extract(auth.ctx, {
-      clientId: params.id,
-      websiteUrl,
-      ...(body.data.socialUrls ? { socialUrls: body.data.socialUrls } : {}),
-    });
+    const data = await service().extract(auth.ctx, { clientId: params.id, websiteUrl });
     return ok({ brandProfile: data }, 201);
   });
 }

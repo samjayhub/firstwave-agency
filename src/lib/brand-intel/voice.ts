@@ -27,15 +27,18 @@ function buildPrompt(pageText: string): string {
   return `Website text (truncated):\n\n${pageText.slice(0, 8000)}`;
 }
 
-/** Pull the first balanced JSON object out of a model response (tolerates fences). */
+/** Pull the JSON object out of a model response — prefer a fenced block, then
+ *  fall back to the outermost brace span (tolerates chatty prose). */
 export function extractJsonObject(raw: string): unknown {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
+  const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fence ? fence[1]! : raw;
+  const start = body.indexOf("{");
+  const end = body.lastIndexOf("}");
   if (start === -1 || end === -1 || end < start) {
     throw new ExternalServiceError("Brand voice analysis returned no JSON");
   }
   try {
-    return JSON.parse(raw.slice(start, end + 1));
+    return JSON.parse(body.slice(start, end + 1));
   } catch {
     throw new ExternalServiceError("Brand voice analysis returned invalid JSON");
   }

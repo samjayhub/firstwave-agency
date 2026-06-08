@@ -11,6 +11,9 @@ export const signupLimiter = new InMemoryRateLimiter(5, 60 * MIN);
 // Brand extraction is the most expensive endpoint (headless browser + LLM):
 // 6 per agency/client per hour.
 export const brandExtractLimiter = new InMemoryRateLimiter(6, 60 * MIN);
+// LLM-cost-bearing content endpoints, keyed per agency+client/item.
+export const contentPlanLimiter = new InMemoryRateLimiter(10, 60 * MIN);
+export const copyGenLimiter = new InMemoryRateLimiter(60, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

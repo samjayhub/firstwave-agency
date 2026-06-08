@@ -2,6 +2,7 @@
 // from the repository logic so tests never import PrismaClient. The `select`
 // pins the returned shape to the record type the repository expects.
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { NotFoundError } from "@/lib/errors/app-error";
 import type { ClientStore } from "./client-repository";
 import type { AuthStore } from "@/lib/auth/auth-service";
 // Type-only imports keep the brand-intel/LLM runtime out of route bundles.
@@ -12,6 +13,9 @@ import type {
   BrandVoice,
   PaletteColor,
 } from "@/lib/brand-intel/types";
+import type { ContentPlanStore } from "@/lib/planner";
+import type { ContentItemStore } from "@/lib/copy";
+import type { StoredCopy } from "@/lib/content/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -71,6 +75,74 @@ export function prismaBrandProfileStore(prisma: PrismaClient): BrandProfileStore
         fonts: (row.fonts ?? []) as unknown as BrandFont[],
         ...(row.logoUrl ? { logoUrl: row.logoUrl } : {}),
       };
+    },
+  };
+}
+
+export function prismaContentPlanStore(prisma: PrismaClient): ContentPlanStore {
+  return {
+    createPlanWithItems: (agencyId, clientId, startDate, items) =>
+      prisma.$transaction(async (tx) => {
+        // Isolation in the predicate: the client must belong to the agency.
+        const client = await tx.client.findFirst({
+          where: { id: clientId, agencyId },
+          select: { id: true },
+        });
+        if (!client) throw new NotFoundError("Client not found");
+        const plan = await tx.contentPlan.create({
+          data: { clientId, startDate },
+          select: { id: true },
+        });
+        const out: Array<{ contentItemId: string; brief: StoredCopy["brief"] }> = [];
+        for (const it of items) {
+          const row = await tx.contentItem.create({
+            data: {
+              planId: plan.id,
+              scheduledAt: it.scheduledAt,
+              status: "draft",
+              copy: it.copy as unknown as Prisma.InputJsonValue,
+            },
+            select: { id: true },
+          });
+          out.push({ contentItemId: row.id, brief: it.copy.brief });
+        }
+        return { planId: plan.id, items: out };
+      }),
+    latestForClient: async (agencyId, clientId) => {
+      const plan = await prisma.contentPlan.findFirst({
+        where: { clientId, client: { agencyId } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, startDate: true, items: { select: { id: true, copy: true } } },
+      });
+      if (!plan) return null;
+      return {
+        planId: plan.id,
+        startDate: plan.startDate,
+        items: plan.items.map((i) => ({
+          contentItemId: i.id,
+          copy: (i.copy ?? null) as unknown as StoredCopy | null,
+        })),
+      };
+    },
+  };
+}
+
+export function prismaContentItemStore(prisma: PrismaClient): ContentItemStore {
+  return {
+    findForAgency: async (agencyId, itemId) => {
+      const row = await prisma.contentItem.findFirst({
+        where: { id: itemId, plan: { client: { agencyId } } },
+        select: { id: true, copy: true, plan: { select: { clientId: true } } },
+      });
+      if (!row) return null;
+      return { id: row.id, clientId: row.plan.clientId, copy: row.copy };
+    },
+    updateCopy: async (agencyId, itemId, copy) => {
+      const res = await prisma.contentItem.updateMany({
+        where: { id: itemId, plan: { client: { agencyId } } },
+        data: { copy: copy as unknown as Prisma.InputJsonValue },
+      });
+      return res.count > 0;
     },
   };
 }

@@ -10,6 +10,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import {
   prismaApprovalStore,
   prismaClientStore,
+  prismaCompetitorStore,
   prismaConnectedAccountRepository,
   prismaPublishJobStore,
   prismaResearchBriefStore,
@@ -17,10 +18,14 @@ import {
 import { getPublisher } from "@/lib/publishers";
 import { isRetryable, runPublishJob, type PublishJobData } from "@/lib/publish/job";
 import { runResearchJob, type ResearchJobData } from "./research-job";
+import { runCompetitorJob, type CompetitorJobData } from "./competitor-job";
 import { ResearchService } from "@/lib/research";
+import { CompetitorService } from "@/lib/competitor";
+import { youtubeCompetitorSource } from "@/lib/competitor/youtube";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import { PrismaAuditSink } from "@/lib/db/audit-sink";
 import { getLlmProvider, DEFAULT_LLM_MODEL } from "@/lib/llm";
+import { requireEnv } from "@/lib/config/env";
 import { assertPublicUrl } from "@/lib/brand-intel/url-guard";
 
 export { QUEUE_NAMES } from "./names";
@@ -88,10 +93,38 @@ function startResearchWorker(): Worker<ResearchJobData> {
   return worker;
 }
 
+function startCompetitorWorker(): Worker<CompetitorJobData> {
+  const prisma = getPrisma();
+  const competitor = new CompetitorService({
+    llm: getLlmProvider(),
+    sink: new PrismaAuditSink(prisma),
+    model: DEFAULT_LLM_MODEL,
+    store: prismaCompetitorStore(prisma),
+    clients: new ClientRepository(prismaClientStore(prisma)),
+    source: youtubeCompetitorSource(requireEnv("YOUTUBE_API_KEY")),
+  });
+
+  const worker = new Worker<CompetitorJobData>(
+    QUEUE_NAMES.competitorSweep,
+    async (job) => runCompetitorJob({ competitor }, job.data),
+    { connection: redisConnection() },
+  );
+  worker.on("completed", (job) =>
+    logger.info("competitor job completed", { jobId: job.id }),
+  );
+  worker.on("failed", (job, err) =>
+    logger.error("competitor job failed", { jobId: job?.id, message: err.message }),
+  );
+  return worker;
+}
+
 function main() {
   startPublishWorker();
   startResearchWorker();
-  logger.info("worker started", { queues: [QUEUE_NAMES.publish, QUEUE_NAMES.researchSweep] });
+  startCompetitorWorker();
+  logger.info("worker started", {
+    queues: [QUEUE_NAMES.publish, QUEUE_NAMES.researchSweep, QUEUE_NAMES.competitorSweep],
+  });
 }
 
 main();

@@ -24,6 +24,8 @@ export const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   IMAGE_GEN_PROVIDER: z.enum(["imagen", "ideogram", "fake"]).default("fake"),
   IMAGE_GEN_API_KEY: z.string().optional(),
+  // Competitor Intelligence — free YouTube Data API v3 key (P2-02).
+  YOUTUBE_API_KEY: z.string().optional(),
 
   // LinkedIn — the MVP publishing platform (PR7).
   LINKEDIN_CLIENT_ID: z.string().optional(),

@@ -18,6 +18,8 @@ export const copyGenLimiter = new InMemoryRateLimiter(60, 60 * MIN);
 export const imageGenLimiter = new InMemoryRateLimiter(30, 60 * MIN);
 // Publishing reaches a real social network — throttle per agency+item.
 export const publishLimiter = new InMemoryRateLimiter(20, 60 * MIN);
+// Research triggers an LLM call per job — 6 per agency+client per hour.
+export const researchLimiter = new InMemoryRateLimiter(6, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

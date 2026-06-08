@@ -1,19 +1,20 @@
-// Publisher registry — resolve the adapter for a platform.
-// Phase 0: only the MVP platform stub is wired. Add adapters here.
-
+// Publisher registry — resolve the official-API adapter for a platform.
+import { requireEnv } from "@/lib/config/env";
+import { ValidationError } from "@/lib/errors/app-error";
 import type { Platform, Publisher } from "./types";
 import { LinkedInPublisher } from "./linkedin";
 
-const registry: Partial<Record<Platform, Publisher>> = {
-  linkedin: new LinkedInPublisher(),
-  // TODO(phase-2): meta_ig, meta_fb, youtube, tiktok, pinterest
-  // x is paid API — deferred (see docs/04-integrations.md §2)
-};
-
 export function getPublisher(platform: Platform): Publisher {
-  const p = registry[platform];
-  if (!p) throw new Error(`No publisher adapter registered for "${platform}"`);
-  return p;
+  switch (platform) {
+    case "linkedin":
+      return new LinkedInPublisher({
+        clientId: requireEnv("LINKEDIN_CLIENT_ID"),
+        clientSecret: requireEnv("LINKEDIN_CLIENT_SECRET"),
+      });
+    default:
+      // meta_ig/meta_fb/youtube/tiktok/pinterest = Phase 2; x = paid (deferred).
+      throw new ValidationError(`No publisher adapter for platform "${platform}"`);
+  }
 }
 
 export type { Publisher, Platform } from "./types";

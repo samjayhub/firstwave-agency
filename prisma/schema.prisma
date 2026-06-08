@@ -77,8 +77,9 @@ model ConnectedAccount {
   clientId     String
   client       Client        @relation(fields: [clientId], references: [id])
   platform     Platform
+  externalId   String? // platform account id / author urn
   handle       String?
-  accessToken  String // encrypted at rest
+  accessToken  String // encrypted at rest (AES-256-GCM)
   refreshToken String? // encrypted at rest
   expiresAt    DateTime?
   contentItems ContentItem[] // many-to-many targets

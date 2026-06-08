@@ -22,3 +22,7 @@
 npm-debug.log*
 /coverage
 next-env.d.ts
+*.tsbuildinfo
+
+# generated media (local asset store)
+/.assets/

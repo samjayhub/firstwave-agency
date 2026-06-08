@@ -7,9 +7,14 @@ import { requireAuth, type AuthContext } from "@/lib/auth/guard";
 import { readSessionToken } from "@/lib/auth/session";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import {
+  prismaApprovalStore,
   prismaAuthStore,
   prismaClientStore,
+  prismaConnectedAccountRepository,
 } from "@/lib/repositories/prisma-stores";
+import { ApprovalService } from "@/lib/approval";
+import { ConnectionService } from "@/lib/connections";
+import { getPublisher } from "@/lib/publishers";
 
 export function authService(): AuthService {
   return new AuthService({
@@ -20,6 +25,21 @@ export function authService(): AuthService {
 
 export function clientRepository(): ClientRepository {
   return new ClientRepository(prismaClientStore(getPrisma()));
+}
+
+export function approvalService(): ApprovalService {
+  return new ApprovalService(prismaApprovalStore(getPrisma()));
+}
+
+export function connectionService(): ConnectionService {
+  return new ConnectionService({
+    accounts: prismaConnectedAccountRepository(getPrisma()),
+    resolvePublisher: getPublisher,
+  });
+}
+
+export function connectedAccountsRepository() {
+  return prismaConnectedAccountRepository(getPrisma());
 }
 
 /** Authenticate the current request from its session cookie. */

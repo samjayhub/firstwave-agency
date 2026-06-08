@@ -1,27 +1,43 @@
-// BullMQ worker entrypoint. Every long-running module (brand extraction,
-// competitor sweep, generation, publish) runs as a retryable job here.
-// Phase 0: stub — no processors registered yet. See docs/02-architecture.md §1.
-
-// import { Worker } from "bullmq";
+// BullMQ worker entrypoint (run with `npm run worker`). Registers processors for
+// the long-running / retryable jobs. Phase 1 wires the publish queue.
+import { Worker } from "bullmq";
+import { redisConnection } from "./connection";
+import { QUEUE_NAMES } from "./names";
 import { logger } from "@/lib/logger";
+import { getPrisma } from "@/lib/db/prisma";
+import {
+  prismaApprovalStore,
+  prismaConnectedAccountRepository,
+  prismaPublishJobStore,
+} from "@/lib/repositories/prisma-stores";
+import { getPublisher } from "@/lib/publishers";
+import { runPublishJob, type PublishJobData } from "@/lib/publish/job";
 
-export const QUEUE_NAMES = {
-  brandExtract: "brand-extract",
-  competitorSweep: "competitor-sweep",
-  trendSweep: "trend-sweep",
-  contentPlan: "content-plan",
-  generateCreative: "generate-creative",
-  publish: "publish",
-  fetchMetrics: "fetch-metrics",
-} as const;
+export { QUEUE_NAMES } from "./names";
 
-// TODO(phase-1): instantiate Worker(s) bound to REDIS_URL and register
-// processors that call the corresponding lib/<module> functions.
+function startPublishWorker(): Worker<PublishJobData> {
+  const prisma = getPrisma();
+  const deps = {
+    approval: prismaApprovalStore(prisma),
+    accounts: prismaConnectedAccountRepository(prisma),
+    jobs: prismaPublishJobStore(prisma),
+    resolvePublisher: getPublisher,
+  };
+  const worker = new Worker<PublishJobData>(
+    QUEUE_NAMES.publish,
+    (job) => runPublishJob(deps, job.data),
+    { connection: redisConnection() },
+  );
+  worker.on("completed", (job) => logger.info("publish job completed", { jobId: job.id }));
+  worker.on("failed", (job, err) =>
+    logger.error("publish job failed", { jobId: job?.id, message: err.message }),
+  );
+  return worker;
+}
 
 function main() {
-  logger.info("worker: no processors registered (Phase 0 scaffold).", {
-    queues: Object.values(QUEUE_NAMES),
-  });
+  startPublishWorker();
+  logger.info("worker started", { queues: [QUEUE_NAMES.publish] });
 }
 
 main();

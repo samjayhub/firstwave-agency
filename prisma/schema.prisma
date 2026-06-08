@@ -49,6 +49,7 @@ model Client {
   niche           String?
   researchBrief   Json?
   competitorBrief Json?
+  trendBrief      Json?
   brandProfile    BrandProfile?
   accounts        ConnectedAccount[]
   competitors     Competitor[]

@@ -14,14 +14,18 @@ import {
   prismaConnectedAccountRepository,
   prismaPublishJobStore,
   prismaResearchBriefStore,
+  prismaTrendStore,
 } from "@/lib/repositories/prisma-stores";
 import { getPublisher } from "@/lib/publishers";
 import { isRetryable, runPublishJob, type PublishJobData } from "@/lib/publish/job";
 import { runResearchJob, type ResearchJobData } from "./research-job";
 import { runCompetitorJob, type CompetitorJobData } from "./competitor-job";
+import { runTrendJob, type TrendJobData } from "./trend-job";
 import { ResearchService } from "@/lib/research";
 import { CompetitorService } from "@/lib/competitor";
 import { youtubeCompetitorSource } from "@/lib/competitor/youtube";
+import { TrendService } from "@/lib/trend";
+import { googleTrendsSource } from "@/lib/trend/google-trends";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import { PrismaAuditSink } from "@/lib/db/audit-sink";
 import { getLlmProvider, DEFAULT_LLM_MODEL } from "@/lib/llm";
@@ -118,12 +122,43 @@ function startCompetitorWorker(): Worker<CompetitorJobData> {
   return worker;
 }
 
+function startTrendWorker(): Worker<TrendJobData> {
+  const prisma = getPrisma();
+  const trend = new TrendService({
+    llm: getLlmProvider(),
+    sink: new PrismaAuditSink(prisma),
+    model: DEFAULT_LLM_MODEL,
+    store: prismaTrendStore(prisma),
+    clients: new ClientRepository(prismaClientStore(prisma)),
+    source: googleTrendsSource(),
+  });
+
+  const worker = new Worker<TrendJobData>(
+    QUEUE_NAMES.trendSweep,
+    async (job) => runTrendJob({ trend }, job.data),
+    { connection: redisConnection() },
+  );
+  worker.on("completed", (job) =>
+    logger.info("trend job completed", { jobId: job.id }),
+  );
+  worker.on("failed", (job, err) =>
+    logger.error("trend job failed", { jobId: job?.id, message: err.message }),
+  );
+  return worker;
+}
+
 function main() {
   startPublishWorker();
   startResearchWorker();
   startCompetitorWorker();
+  startTrendWorker();
   logger.info("worker started", {
-    queues: [QUEUE_NAMES.publish, QUEUE_NAMES.researchSweep, QUEUE_NAMES.competitorSweep],
+    queues: [
+      QUEUE_NAMES.publish,
+      QUEUE_NAMES.researchSweep,
+      QUEUE_NAMES.competitorSweep,
+      QUEUE_NAMES.trendSweep,
+    ],
   });
 }
 

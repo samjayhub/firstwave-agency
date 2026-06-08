@@ -7,6 +7,7 @@
 //   - scrubSecrets(): scrubs secrets that live inside a string VALUE (bearer
 //     tokens, URLs with credentials, JWTs, provider keys) — used for free-text
 //     like exception messages where the key ("error") isn't itself sensitive.
+import { getEnv } from "@/lib/config/env";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -81,8 +82,9 @@ const VALUE_PATTERNS: Array<[RegExp, string]> = [
   [/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[REDACTED_JWT]"],
   // Common provider key prefixes
   [/\b(sk-ant-[A-Za-z0-9-]+|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]+)\b/g, "[REDACTED]"],
-  // Long opaque base64-ish runs (token-like)
-  [/\b[A-Za-z0-9+/]{32,}={0,2}\b/g, "[REDACTED]"],
+  // NOTE: no greedy "long base64 run" catch-all — it corrupted legitimate IDs
+  // (CUIDs, post IDs, media URNs) in diagnostics. The targeted patterns above
+  // cover real secret shapes without destroying debuggable content.
 ];
 
 /** Scrub secrets embedded inside free-text (e.g. an exception message). */
@@ -142,7 +144,18 @@ export function createLogger(options: LoggerOptions = {}): Logger {
   };
 }
 
+/**
+ * Resolve the default level through the validated env gate. Falls back to "info"
+ * if env parsing fails during early module import (this file is imported before
+ * config is guaranteed valid), so logging never crashes app boot.
+ */
+function resolveDefaultLevel(): LogLevel {
+  try {
+    return getEnv().LOG_LEVEL;
+  } catch {
+    return "info";
+  }
+}
+
 /** Default app logger. */
-export const logger = createLogger({
-  level: (process.env.LOG_LEVEL as LogLevel) || "info",
-});
+export const logger = createLogger({ level: resolveDefaultLevel() });

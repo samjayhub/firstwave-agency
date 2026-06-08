@@ -7,6 +7,7 @@ import { z } from "zod";
 
 export const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   APP_BASE_URL: z.string().url().default("http://localhost:3000"),
 
   // Data + queue (needed from PR2/PR7 onward).
@@ -65,6 +66,8 @@ export function resetEnvCache(): void {
 /**
  * Return a required env value or throw. Use at the point a feature needs a secret
  * so missing config fails loudly instead of producing a confusing downstream error.
+ * Intended for the genuinely-optional secrets (JWT_SECRET, OAuth, API keys) — for
+ * fields with a zod `.default()` read `getEnv().X` directly (they are never empty).
  */
 export function requireEnv<K extends keyof Env>(
   key: K,

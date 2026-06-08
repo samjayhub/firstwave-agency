@@ -3,6 +3,7 @@
 // Phase 0: stub — no processors registered yet. See docs/02-architecture.md §1.
 
 // import { Worker } from "bullmq";
+import { logger } from "@/lib/logger";
 
 export const QUEUE_NAMES = {
   brandExtract: "brand-extract",
@@ -18,8 +19,9 @@ export const QUEUE_NAMES = {
 // processors that call the corresponding lib/<module> functions.
 
 function main() {
-  // eslint-disable-next-line no-console
-  console.log("worker: no processors registered (Phase 0 scaffold).");
+  logger.info("worker: no processors registered (Phase 0 scaffold).", {
+    queues: Object.values(QUEUE_NAMES),
+  });
 }
 
 main();

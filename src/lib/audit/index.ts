@@ -53,23 +53,25 @@ export async function withAudit<T>(
   const startedAt = clock().getTime();
   try {
     const out = await fn();
+    const finishedAt = clock();
     await sink.record({
       ...meta,
       status: "success",
       outputSummary: out.outputSummary,
       promptTokens: out.promptTokens,
       completionTokens: out.completionTokens,
-      latencyMs: clock().getTime() - startedAt,
-      createdAt: clock(),
+      latencyMs: finishedAt.getTime() - startedAt,
+      createdAt: finishedAt,
     });
     return out.result;
   } catch (err) {
+    const finishedAt = clock();
     await sink.record({
       ...meta,
       status: "error",
       error: safeErrorMessage(err),
-      latencyMs: clock().getTime() - startedAt,
-      createdAt: clock(),
+      latencyMs: finishedAt.getTime() - startedAt,
+      createdAt: finishedAt,
     });
     throw err;
   }

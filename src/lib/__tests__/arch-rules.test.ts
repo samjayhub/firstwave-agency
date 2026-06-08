@@ -52,6 +52,10 @@ describe("architectural rules", () => {
     expect(offenders(/\b(setTimeout|setInterval)\s*\(/, { skipTests: true })).toEqual([]);
   });
 
+  it("uses no console.* in business code (log through the structured logger)", () => {
+    expect(offenders(/\bconsole\.\w+\s*\(/, { skipTests: true })).toEqual([]);
+  });
+
   it("hardcodes no obvious secrets", () => {
     // Flags string-assigned values that look like real keys, not env reads.
     expect(

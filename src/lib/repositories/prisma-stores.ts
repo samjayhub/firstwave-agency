@@ -1,9 +1,17 @@
 // Prisma-backed implementations of the repository store interfaces. Kept apart
 // from the repository logic so tests never import PrismaClient. The `select`
 // pins the returned shape to the record type the repository expects.
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import type { ClientStore } from "./client-repository";
 import type { AuthStore } from "@/lib/auth/auth-service";
+// Type-only imports keep the brand-intel/LLM runtime out of route bundles.
+import type { BrandProfileStore } from "@/lib/brand-intel";
+import type {
+  BrandFont,
+  BrandProfileData,
+  BrandVoice,
+  PaletteColor,
+} from "@/lib/brand-intel/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -35,6 +43,37 @@ const AUTH_USER_SELECT = {
   role: true,
   passwordHash: true,
 } as const;
+
+export function prismaBrandProfileStore(prisma: PrismaClient): BrandProfileStore {
+  return {
+    upsert: async (clientId, data) => {
+      const payload = {
+        voice: data.voice as unknown as Prisma.InputJsonValue,
+        palette: data.palette as unknown as Prisma.InputJsonValue,
+        fonts: data.fonts as unknown as Prisma.InputJsonValue,
+        logoUrl: data.logoUrl ?? null,
+      };
+      await prisma.brandProfile.upsert({
+        where: { clientId },
+        create: { clientId, ...payload },
+        update: payload,
+      });
+    },
+    findByClient: async (clientId): Promise<BrandProfileData | null> => {
+      const row = await prisma.brandProfile.findUnique({
+        where: { clientId },
+        select: { voice: true, palette: true, fonts: true, logoUrl: true },
+      });
+      if (!row || row.voice == null) return null;
+      return {
+        voice: row.voice as unknown as BrandVoice,
+        palette: (row.palette ?? []) as unknown as PaletteColor[],
+        fonts: (row.fonts ?? []) as unknown as BrandFont[],
+        ...(row.logoUrl ? { logoUrl: row.logoUrl } : {}),
+      };
+    },
+  };
+}
 
 export function prismaAuthStore(prisma: PrismaClient): AuthStore {
   return {

@@ -1,6 +1,12 @@
 // Structured JSON logger with automatic secret redaction. Business code logs
 // through this — never `console.log` — so output is parseable and tokens /
 // passwords are scrubbed before they can ever reach a log sink.
+//
+// Two layers of protection:
+//   - redact(): scrubs values by KEY name (password, token, ...).
+//   - scrubSecrets(): scrubs secrets that live inside a string VALUE (bearer
+//     tokens, URLs with credentials, JWTs, provider keys) — used for free-text
+//     like exception messages where the key ("error") isn't itself sensitive.
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -14,34 +20,76 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
 // Substrings (case-insensitive) of keys whose values must never be logged.
 const REDACT_KEYS = [
   "password",
+  "passwd",
+  "pwd",
   "secret",
-  "token",
+  "clientsecret",
+  "token", // covers access_token, refreshToken, bearer token, etc.
   "authorization",
+  "bearer",
   "apikey",
   "api_key",
   "jwt",
-  "cookie",
-  "clientsecret",
+  "cookie", // covers set-cookie
+  "credential", // covers credentials
+  "private_key",
+  "privatekey",
+  "session",
+  "sessionid",
+  "sid",
+  "signature",
+  "salt",
+  "otp",
+  "mfa",
 ];
 
 const REDACTED = "[REDACTED]";
+const MAX_DEPTH = 12;
 
 function shouldRedact(key: string): boolean {
   const k = key.toLowerCase();
   return REDACT_KEYS.some((needle) => k.includes(needle));
 }
 
-/** Deep-clone a value, replacing sensitive values with [REDACTED]. Cycle-safe. */
-export function redact(value: unknown, seen = new WeakSet<object>()): unknown {
+/** Deep-clone a value, replacing sensitive values with [REDACTED]. Cycle- and depth-safe. */
+export function redact(
+  value: unknown,
+  seen = new WeakSet<object>(),
+  depth = 0,
+): unknown {
   if (value === null || typeof value !== "object") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (depth >= MAX_DEPTH) return "[Truncated]";
   if (seen.has(value as object)) return "[Circular]";
   seen.add(value as object);
 
-  if (Array.isArray(value)) return value.map((v) => redact(v, seen));
+  if (Array.isArray(value)) return value.map((v) => redact(v, seen, depth + 1));
 
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = shouldRedact(k) ? REDACTED : redact(v, seen);
+    out[k] = shouldRedact(k) ? REDACTED : redact(v, seen, depth + 1);
+  }
+  return out;
+}
+
+// Value-level secret patterns. All linear (no nested quantifiers) → no ReDoS.
+const VALUE_PATTERNS: Array<[RegExp, string]> = [
+  [/(bearer\s+)[A-Za-z0-9._-]+/gi, "$1[REDACTED]"],
+  // URLs embedding credentials: scheme://user:pass@host
+  [/([a-z][a-z0-9+.-]*:\/\/)[^\s:@/]+:[^\s:@/]+@/gi, "$1[REDACTED]@"],
+  // JWTs
+  [/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[REDACTED_JWT]"],
+  // Common provider key prefixes
+  [/\b(sk-ant-[A-Za-z0-9-]+|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]+)\b/g, "[REDACTED]"],
+  // Long opaque base64-ish runs (token-like)
+  [/\b[A-Za-z0-9+/]{32,}={0,2}\b/g, "[REDACTED]"],
+];
+
+/** Scrub secrets embedded inside free-text (e.g. an exception message). */
+export function scrubSecrets(text: string): string {
+  let out = text;
+  for (const [pattern, replacement] of VALUE_PATTERNS) {
+    out = out.replace(pattern, replacement);
   }
   return out;
 }

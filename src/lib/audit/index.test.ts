@@ -50,4 +50,15 @@ describe("withAudit", () => {
     expect(sink.records[0].status).toBe("error");
     expect(sink.records[0].error).toBe("model timeout");
   });
+
+  it("scrubs secrets embedded in a captured error message", async () => {
+    const sink = new InMemoryAuditSink();
+    await expect(
+      withAudit(sink, meta, async () => {
+        throw new Error("401 from provider: Authorization: Bearer sk-ant-secretvalue123");
+      }),
+    ).rejects.toThrow();
+    expect(sink.records[0].error).not.toContain("sk-ant-secretvalue123");
+    expect(sink.records[0].error).toContain("[REDACTED]");
+  });
 });

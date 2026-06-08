@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createLogger, redact } from "./index";
+import { createLogger, redact, scrubSecrets } from "./index";
 
 function capture() {
   const lines: string[] = [];
@@ -29,6 +29,42 @@ describe("redact", () => {
     const a: Record<string, unknown> = { name: "x" };
     a.self = a;
     expect(() => redact(a)).not.toThrow();
+  });
+
+  it("covers the extended sensitive-key set", () => {
+    const out = redact({
+      credential: "c",
+      sessionId: "s",
+      private_key: "k",
+      signature: "sig",
+      passwd: "p",
+    }) as Record<string, unknown>;
+    expect(Object.values(out)).toEqual([
+      "[REDACTED]",
+      "[REDACTED]",
+      "[REDACTED]",
+      "[REDACTED]",
+      "[REDACTED]",
+    ]);
+  });
+
+  it("caps recursion depth instead of overflowing the stack", () => {
+    let deep: Record<string, unknown> = { v: 1 };
+    for (let i = 0; i < 50; i++) deep = { child: deep };
+    expect(() => redact(deep)).not.toThrow();
+    expect(JSON.stringify(redact(deep))).toContain("[Truncated]");
+  });
+});
+
+describe("scrubSecrets", () => {
+  it("masks bearer tokens, credentialed URLs, and JWTs in free text", () => {
+    const input =
+      "auth failed: Authorization: Bearer abc123XYZ.tok_-9 connecting to postgres://user:pass@db:5432 token=eyJhbGciOi.JzdWIiOiIx.Q2sQ5fg";
+    const out = scrubSecrets(input);
+    expect(out).not.toContain("abc123XYZ");
+    expect(out).not.toContain("user:pass@");
+    expect(out).not.toMatch(/eyJhbGciOi\.JzdWIiOiIx/);
+    expect(out).toContain("[REDACTED]");
   });
 });
 

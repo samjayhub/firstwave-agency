@@ -1,7 +1,15 @@
-import { logger as defaultLogger, type Logger } from "@/lib/logger";
+import { logger as defaultLogger, scrubSecrets, type Logger } from "@/lib/logger";
 import type { AiAuditRecord, AiAuditSink } from "./types";
 
 export * from "./types";
+
+const MAX_ERROR_LEN = 500;
+
+/** Sanitize a captured exception message: scrub embedded secrets + truncate. */
+function safeErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  return scrubSecrets(raw).slice(0, MAX_ERROR_LEN);
+}
 
 /** Keeps records in memory — used by tests and as a default no-DB fallback. */
 export class InMemoryAuditSink implements AiAuditSink {
@@ -59,7 +67,7 @@ export async function withAudit<T>(
     await sink.record({
       ...meta,
       status: "error",
-      error: err instanceof Error ? err.message : String(err),
+      error: safeErrorMessage(err),
       latencyMs: clock().getTime() - startedAt,
       createdAt: clock(),
     });

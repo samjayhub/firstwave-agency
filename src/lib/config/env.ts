@@ -15,8 +15,9 @@ export const envSchema = z.object({
 
   // Auth (PR3).
   JWT_SECRET: z.string().min(16).optional(),
-  // Used to encrypt OAuth tokens at rest (PR7). Must be 32 bytes (base64/hex).
-  TOKEN_ENCRYPTION_KEY: z.string().min(16).optional(),
+  // Used to encrypt OAuth tokens at rest (PR7). >=32 chars so a weak key fails
+  // at boot rather than producing a weak cipher at runtime.
+  TOKEN_ENCRYPTION_KEY: z.string().min(32).optional(),
 
   // AI providers (metered compute — the one unavoidable cost).
   ANTHROPIC_API_KEY: z.string().optional(),
@@ -35,7 +36,9 @@ export const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 /** Parse + validate a raw environment object. Throws with a readable summary. */
-export function parseEnv(source: NodeJS.ProcessEnv = process.env): Env {
+export function parseEnv(
+  source: Record<string, string | undefined> = process.env,
+): Env {
   const parsed = envSchema.safeParse(source);
   if (!parsed.success) {
     const issues = parsed.error.issues

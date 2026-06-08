@@ -17,6 +17,10 @@ import type { ContentPlanStore } from "@/lib/planner";
 import type { ContentItemStore } from "@/lib/copy";
 import type { StoredCopy } from "@/lib/content/types";
 import type { AssetRepository } from "@/lib/creative";
+import type { ApprovalStore, ItemStatus } from "@/lib/approval";
+import type { ConnectedAccountRepository } from "@/lib/connections";
+import type { PublishJobStore } from "@/lib/publish/job";
+import type { Platform } from "@/lib/publishers/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -184,6 +188,151 @@ export function prismaAssetRepository(prisma: PrismaClient): AssetRepository {
         orderBy: { createdAt: "desc" },
         select: ASSET_SELECT,
       }),
+  };
+}
+
+export function prismaApprovalStore(prisma: PrismaClient): ApprovalStore {
+  return {
+    get: async (agencyId, itemId) => {
+      const row = await prisma.contentItem.findFirst({
+        where: { id: itemId, plan: { client: { agencyId } } },
+        select: {
+          id: true,
+          status: true,
+          scheduledAt: true,
+          copy: true,
+          plan: { select: { clientId: true } },
+        },
+      });
+      if (!row) return null;
+      return {
+        id: row.id,
+        clientId: row.plan.clientId,
+        status: row.status as ItemStatus,
+        scheduledAt: row.scheduledAt,
+        copy: row.copy,
+      };
+    },
+    transition: async (agencyId, itemId, from, to) => {
+      const res = await prisma.contentItem.updateMany({
+        where: { id: itemId, status: from, plan: { client: { agencyId } } },
+        data: { status: to },
+      });
+      return res.count > 0;
+    },
+    listByClient: async (agencyId, clientId, status) => {
+      const rows = await prisma.contentItem.findMany({
+        where: {
+          plan: { clientId, client: { agencyId } },
+          ...(status ? { status } : {}),
+        },
+        orderBy: { scheduledAt: "asc" },
+        select: {
+          id: true,
+          status: true,
+          scheduledAt: true,
+          copy: true,
+          plan: { select: { clientId: true } },
+        },
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        clientId: r.plan.clientId,
+        status: r.status as ItemStatus,
+        scheduledAt: r.scheduledAt,
+        copy: r.copy,
+      }));
+    },
+  };
+}
+
+export function prismaConnectedAccountRepository(
+  prisma: PrismaClient,
+): ConnectedAccountRepository {
+  return {
+    create: (agencyId, input) =>
+      prisma.$transaction(async (tx) => {
+        const client = await tx.client.findFirst({
+          where: { id: input.clientId, agencyId },
+          select: { id: true },
+        });
+        if (!client) throw new NotFoundError("Client not found");
+        const row = await tx.connectedAccount.create({
+          data: {
+            clientId: input.clientId,
+            platform: input.platform,
+            externalId: input.externalId,
+            handle: input.handle ?? null,
+            accessToken: input.accessTokenEnc,
+            refreshToken: input.refreshTokenEnc ?? null,
+            expiresAt: input.expiresAt ?? null,
+          },
+          select: { id: true },
+        });
+        return { id: row.id };
+      }),
+    getForAgency: async (agencyId, accountId) => {
+      const row = await prisma.connectedAccount.findFirst({
+        where: { id: accountId, client: { agencyId } },
+        select: {
+          id: true,
+          clientId: true,
+          platform: true,
+          externalId: true,
+          handle: true,
+          accessToken: true,
+          refreshToken: true,
+          expiresAt: true,
+        },
+      });
+      if (!row || !row.externalId) return null;
+      return {
+        id: row.id,
+        clientId: row.clientId,
+        platform: row.platform as Platform,
+        externalId: row.externalId,
+        handle: row.handle,
+        accessTokenEnc: row.accessToken,
+        refreshTokenEnc: row.refreshToken,
+        expiresAt: row.expiresAt,
+      };
+    },
+    listForClient: async (agencyId, clientId) => {
+      const rows = await prisma.connectedAccount.findMany({
+        where: { clientId, client: { agencyId } },
+        select: { id: true, platform: true, handle: true, externalId: true },
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        platform: r.platform as Platform,
+        handle: r.handle,
+        externalId: r.externalId ?? "",
+      }));
+    },
+  };
+}
+
+export function prismaPublishJobStore(prisma: PrismaClient): PublishJobStore {
+  return {
+    create: (input) =>
+      prisma.publishJob.create({
+        data: {
+          contentItemId: input.contentItemId,
+          platform: input.platform,
+          state: input.state,
+        },
+        select: { id: true },
+      }),
+    markResult: async (id, result) => {
+      await prisma.publishJob.update({
+        where: { id },
+        data: {
+          state: result.state,
+          externalId: result.externalId ?? null,
+          error: result.error ?? null,
+        },
+      });
+    },
   };
 }
 

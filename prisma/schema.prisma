@@ -23,12 +23,13 @@ model Agency {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  agencyId  String
-  agency    Agency   @relation(fields: [agencyId], references: [id])
-  email     String   @unique
-  role      Role
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  agencyId     String
+  agency       Agency   @relation(fields: [agencyId], references: [id])
+  email        String   @unique
+  role         Role
+  passwordHash String
+  createdAt    DateTime @default(now())
 
   @@index([agencyId])
 }

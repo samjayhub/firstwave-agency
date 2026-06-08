@@ -5,12 +5,12 @@
 import type { TenantContext } from "@/lib/db/tenancy";
 import type { AiAuditSink } from "@/lib/audit";
 import type { LlmProvider } from "@/lib/llm";
-import { ValidationError } from "@/lib/errors/app-error";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import { paletteFromCss } from "./colors";
 import { fontsFromCss } from "./fonts";
 import { pickLogo } from "./logo";
 import { analyzeVoice } from "./voice";
+import { assertPublicUrl, type AddressLookup } from "./url-guard";
 import type { BrandCrawler } from "./crawler";
 import type { BrandProfileData, ExtractInput } from "./types";
 
@@ -29,6 +29,8 @@ export interface BrandIntelligenceDeps {
   model: string;
   clients: ClientRepository;
   profiles: BrandProfileStore;
+  /** Injectable DNS resolver for the SSRF guard (defaults to real DNS). */
+  lookup?: AddressLookup;
 }
 
 export class BrandIntelligenceService {
@@ -39,9 +41,8 @@ export class BrandIntelligenceService {
     // Ownership: throws NotFound if the client is not in the caller's agency.
     await this.deps.clients.get(ctx, input.clientId);
 
-    if (!/^https?:\/\//i.test(input.websiteUrl)) {
-      throw new ValidationError("websiteUrl must be an absolute http(s) URL");
-    }
+    // SSRF guard: only public http(s) targets may be crawled.
+    await assertPublicUrl(input.websiteUrl, this.deps.lookup);
 
     const page = await this.deps.crawler.crawl(input.websiteUrl);
 

@@ -8,6 +8,9 @@ const MIN = 60_000;
 // 10 login attempts / 15 min, 5 signups / hour — per key (IP and/or email).
 export const loginLimiter = new InMemoryRateLimiter(10, 15 * MIN);
 export const signupLimiter = new InMemoryRateLimiter(5, 60 * MIN);
+// Brand extraction is the most expensive endpoint (headless browser + LLM):
+// 6 per agency/client per hour.
+export const brandExtractLimiter = new InMemoryRateLimiter(6, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

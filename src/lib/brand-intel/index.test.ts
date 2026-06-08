@@ -37,8 +37,9 @@ async function setup() {
     model: "claude-sonnet-4-6",
     clients,
     profiles,
+    lookup: async () => ["93.184.216.34"], // hermetic: no real DNS
   });
-  return { svc, client, profiles, sink };
+  return { svc, client, profiles, clients, sink };
 }
 
 describe("BrandIntelligenceService.extract", () => {
@@ -68,6 +69,33 @@ describe("BrandIntelligenceService.extract", () => {
     const { svc, client } = await setup();
     await expect(
       svc.extract({ agencyId: "ag1" }, { clientId: client.id, websiteUrl: "acme.com" }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+  });
+
+  it("blocks SSRF: refuses a websiteUrl that resolves to a private address", async () => {
+    const clients = new ClientRepository(new FakeClientStore());
+    const client = await clients.create({ agencyId: "ag1" }, { name: "Acme" });
+    const svc = new BrandIntelligenceService({
+      crawler: new FakeCrawler(PAGE),
+      llm: FakeLlmProvider.constant(VOICE),
+      sink: new InMemoryAuditSink(),
+      model: "m",
+      clients,
+      profiles: new FakeBrandProfileStore(),
+      lookup: async () => ["10.0.0.7"], // internal IP
+    });
+    await expect(
+      svc.extract({ agencyId: "ag1" }, { clientId: client.id, websiteUrl: "http://internal.evil.test" }),
+    ).rejects.toMatchObject({ code: "VALIDATION" });
+  });
+
+  it("blocks SSRF: refuses the cloud metadata IP literal", async () => {
+    const { svc, client } = await setup();
+    await expect(
+      svc.extract(
+        { agencyId: "ag1" },
+        { clientId: client.id, websiteUrl: "http://169.254.169.254/latest/meta-data" },
+      ),
     ).rejects.toMatchObject({ code: "VALIDATION" });
   });
 });

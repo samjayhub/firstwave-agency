@@ -14,6 +14,8 @@ export const brandExtractLimiter = new InMemoryRateLimiter(6, 60 * MIN);
 // LLM-cost-bearing content endpoints, keyed per agency+client/item.
 export const contentPlanLimiter = new InMemoryRateLimiter(10, 60 * MIN);
 export const copyGenLimiter = new InMemoryRateLimiter(60, 60 * MIN);
+// Image generation (metered creative compute).
+export const imageGenLimiter = new InMemoryRateLimiter(30, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

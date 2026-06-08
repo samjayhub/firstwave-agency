@@ -64,6 +64,11 @@ export async function runPublishJob(
   try {
     const item = await deps.approval.get(data.agencyId, data.itemId);
     if (!item) throw new NotFoundError("Content item not found");
+    // The connected account must belong to the SAME client as the item — never
+    // post one client's content to another client's account (even within an agency).
+    if (item.clientId !== account.clientId) {
+      throw new ValidationError("Connected account belongs to a different client");
+    }
     // Human-approval gate: only an item that was approved → scheduled may publish.
     if (item.status !== "scheduled") {
       throw new ConflictError("Content item is not scheduled for publishing");

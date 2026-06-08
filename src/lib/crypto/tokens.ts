@@ -7,6 +7,8 @@ import { requireEnv } from "@/lib/config/env";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;
+// Version prefix so TOKEN_ENCRYPTION_KEY can be rotated later (select key by version).
+const VERSION = "v1";
 
 function deriveKey(secret: string): Buffer {
   return createHash("sha256").update(secret).digest();
@@ -20,16 +22,16 @@ export function encryptToken(
   const cipher = createCipheriv(ALGORITHM, deriveKey(secret), iv);
   const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return [iv.toString("base64"), tag.toString("base64"), enc.toString("base64")].join(".");
+  return [VERSION, iv.toString("base64"), tag.toString("base64"), enc.toString("base64")].join(".");
 }
 
 export function decryptToken(
   ciphertext: string,
   secret: string = requireEnv("TOKEN_ENCRYPTION_KEY"),
 ): string {
-  const [ivB64, tagB64, dataB64] = ciphertext.split(".");
-  if (!ivB64 || !tagB64 || !dataB64) {
-    throw new Error("Malformed ciphertext");
+  const [version, ivB64, tagB64, dataB64] = ciphertext.split(".");
+  if (version !== VERSION || !ivB64 || !tagB64 || !dataB64) {
+    throw new Error("Malformed or unsupported ciphertext");
   }
   const decipher = createDecipheriv(ALGORITHM, deriveKey(secret), Buffer.from(ivB64, "base64"));
   decipher.setAuthTag(Buffer.from(tagB64, "base64"));

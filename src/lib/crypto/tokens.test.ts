@@ -4,9 +4,10 @@ import { encryptToken, decryptToken } from "./tokens";
 const SECRET = "a-test-encryption-key-32-chars-min!!";
 
 describe("token encryption", () => {
-  it("round-trips a token", () => {
+  it("round-trips a token and carries a version prefix", () => {
     const enc = encryptToken("urn:li:token:abc123", SECRET);
     expect(enc).not.toContain("abc123"); // ciphertext, not plaintext
+    expect(enc.startsWith("v1.")).toBe(true);
     expect(decryptToken(enc, SECRET)).toBe("urn:li:token:abc123");
   });
 
@@ -21,8 +22,8 @@ describe("token encryption", () => {
 
   it("fails to decrypt tampered ciphertext (GCM auth tag)", () => {
     const enc = encryptToken("secret", SECRET);
-    const [iv, tag, data] = enc.split(".");
-    const tampered = [iv, tag, Buffer.from("tampered-bytes-xxxxxxxx").toString("base64")].join(".");
+    const [version, iv, tag] = enc.split(".");
+    const tampered = [version, iv, tag, Buffer.from("tampered-bytes-xxxxxxxx").toString("base64")].join(".");
     expect(() => decryptToken(tampered, SECRET)).toThrow();
   });
 

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { fail } from "@/app/api/_lib/respond";
@@ -7,6 +8,12 @@ import { ForbiddenError, ValidationError } from "@/lib/errors/app-error";
 import type { Platform } from "@/lib/publishers/types";
 
 export const runtime = "nodejs";
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 export async function GET(req: Request, { params }: { params: { platform: string } }) {
   try {
@@ -25,7 +32,7 @@ export async function GET(req: Request, { params }: { params: { platform: string
 
     // CSRF: the nonce in state must match the HttpOnly cookie set at /start.
     const cookieNonce = cookies().get("oauth_state")?.value;
-    if (!cookieNonce || cookieNonce !== state.nonce) {
+    if (!cookieNonce || !state.nonce || !constantTimeEqual(cookieNonce, state.nonce)) {
       throw new ForbiddenError("OAuth state mismatch");
     }
     if (!state.clientId || state.platform !== params.platform) {

@@ -125,6 +125,25 @@ describe("runPublishJob", () => {
     expect((await approval.get("ag1", "item_1"))!.status).toBe("failed");
   });
 
+  it("refuses to post one client's content to another client's account", async () => {
+    const { approval, jobs } = await setup(); // item belongs to client cl1
+    const accounts = new FakeConnectedAccountRepository();
+    const { id } = await accounts.create("ag1", {
+      clientId: "cl2", // different client, same agency
+      platform: "linkedin",
+      externalId: "urn:li:person:other",
+      accessTokenEnc: "E",
+    });
+    const deps: PublishJobDeps = {
+      approval,
+      accounts,
+      jobs,
+      resolvePublisher: () => publisher(),
+      decrypt: (s) => s,
+    };
+    await expect(runPublishJob(deps, data(id))).rejects.toMatchObject({ code: "VALIDATION" });
+  });
+
   it("refuses a connected account in another agency", async () => {
     const { approval, jobs } = await setup();
     const accounts = new FakeConnectedAccountRepository(); // empty

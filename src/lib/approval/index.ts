@@ -60,6 +60,12 @@ export class ApprovalService {
     return this.move(ctx, itemId, "scheduled");
   }
 
+  async get(ctx: TenantContext, itemId: string): Promise<ApprovalItem> {
+    const item = await this.store.get(ctx.agencyId, itemId);
+    if (!item) throw new NotFoundError("Content item not found");
+    return item;
+  }
+
   list(ctx: TenantContext, clientId: string, status?: ItemStatus) {
     return this.store.listByClient(ctx.agencyId, clientId, status);
   }

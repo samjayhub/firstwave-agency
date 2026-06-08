@@ -16,6 +16,7 @@ import type {
 import type { ContentPlanStore } from "@/lib/planner";
 import type { ContentItemStore } from "@/lib/copy";
 import type { StoredCopy } from "@/lib/content/types";
+import type { AssetRepository } from "@/lib/creative";
 
 const CLIENT_SELECT = {
   id: true,
@@ -144,6 +145,45 @@ export function prismaContentItemStore(prisma: PrismaClient): ContentItemStore {
       });
       return res.count > 0;
     },
+  };
+}
+
+const ASSET_SELECT = {
+  id: true,
+  contentItemId: true,
+  kind: true,
+  url: true,
+  source: true,
+  createdAt: true,
+} as const;
+
+export function prismaAssetRepository(prisma: PrismaClient): AssetRepository {
+  return {
+    create: (agencyId, input) =>
+      prisma.$transaction(async (tx) => {
+        // Isolation in the predicate: the content item must belong to the agency.
+        const item = await tx.contentItem.findFirst({
+          where: { id: input.contentItemId, plan: { client: { agencyId } } },
+          select: { id: true },
+        });
+        if (!item) throw new NotFoundError("Content item not found");
+        return tx.asset.create({
+          data: {
+            contentItemId: input.contentItemId,
+            kind: input.kind,
+            url: input.url,
+            source: input.source,
+            meta: (input.meta ?? undefined) as Prisma.InputJsonValue | undefined,
+          },
+          select: ASSET_SELECT,
+        });
+      }),
+    listForItem: (agencyId, itemId) =>
+      prisma.asset.findMany({
+        where: { contentItemId: itemId, contentItem: { plan: { client: { agencyId } } } },
+        orderBy: { createdAt: "desc" },
+        select: ASSET_SELECT,
+      }),
   };
 }
 

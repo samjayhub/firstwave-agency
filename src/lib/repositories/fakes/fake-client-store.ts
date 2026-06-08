@@ -61,11 +61,14 @@ export class FakeClientStore implements ClientStore {
     where,
     data,
   }: {
-    where: { id: string };
+    where: { id: string; agencyId: string };
     data: ClientUpdateInput;
-  }): Promise<ClientRecord> {
-    const row = this.rows.find((r) => r.id === where.id);
-    if (!row) throw new Error("record to update not found"); // repo guards with get() first
+  }): Promise<ClientRecord | null> {
+    // Scoped write: only matches when BOTH id and agencyId match.
+    const row = this.rows.find(
+      (r) => r.id === where.id && r.agencyId === where.agencyId,
+    );
+    if (!row) return null;
     if (data.name !== undefined) row.name = data.name;
     if (data.websiteUrl !== undefined) row.websiteUrl = data.websiteUrl;
     if (data.niche !== undefined) row.niche = data.niche;

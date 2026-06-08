@@ -52,7 +52,16 @@ export interface ClientStore {
   }): Promise<ClientRecord>;
   findMany(args: ClientFindManyArgs): Promise<ClientRecord[]>;
   findFirst(args: { where: { id: string; agencyId: string } }): Promise<ClientRecord | null>;
-  update(args: { where: { id: string }; data: ClientUpdateInput }): Promise<ClientRecord>;
+  /**
+   * Scoped write: updates the row only if BOTH id AND agencyId match. Returns the
+   * updated record, or null if nothing matched (not found / wrong tenant). This
+   * makes isolation self-contained in the write predicate — it does not rely on a
+   * prior scoped read.
+   */
+  update(args: {
+    where: { id: string; agencyId: string };
+    data: ClientUpdateInput;
+  }): Promise<ClientRecord | null>;
 }
 
 export class ClientRepository {
@@ -96,8 +105,14 @@ export class ClientRepository {
     id: string,
     input: ClientUpdateInput,
   ): Promise<ClientRecord> {
-    // get() enforces that the client belongs to this agency before we mutate.
-    await this.get(ctx, id);
-    return withDbErrors(() => this.store.update({ where: { id }, data: input }), "Client");
+    const agencyId = assertAgencyId(ctx.agencyId);
+    // The agencyId is part of the write predicate, so a cross-tenant id matches
+    // nothing — isolation is enforced by the write itself, not a prior read.
+    const row = await withDbErrors(
+      () => this.store.update({ where: { id, agencyId }, data: input }),
+      "Client",
+    );
+    if (!row) throw new NotFoundError("Client not found");
+    return row;
   }
 }

@@ -22,6 +22,7 @@ import type { ConnectedAccountRepository } from "@/lib/connections";
 import type { PublishJobStore } from "@/lib/publish/job";
 import type { Platform } from "@/lib/publishers/types";
 import type { ResearchBrief, ResearchBriefStore } from "@/lib/research/types";
+import type { CompetitorBrief, CompetitorStore } from "@/lib/competitor/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -352,6 +353,61 @@ export function prismaResearchBriefStore(prisma: PrismaClient): ResearchBriefSto
       });
       if (!row || row.researchBrief == null) return null;
       return row.researchBrief as unknown as ResearchBrief;
+    },
+  };
+}
+
+export function prismaCompetitorStore(prisma: PrismaClient): CompetitorStore {
+  return {
+    save: async (agencyId, clientId, metrics, brief) =>
+      prisma.$transaction(async (tx) => {
+        // Isolation in the predicate: the client must belong to the agency.
+        const client = await tx.client.findFirst({
+          where: { id: clientId, agencyId },
+          select: { id: true },
+        });
+        if (!client) throw new NotFoundError("Client not found");
+        // Aggregate brief on the client — what the planner reads.
+        await tx.client.update({
+          where: { id: clientId },
+          data: { competitorBrief: brief as unknown as Prisma.InputJsonValue },
+        });
+        // Upsert each tracked competitor (no unique key on handle) and append an
+        // insight snapshot capturing this sweep's metrics.
+        for (const m of metrics) {
+          const existing = await tx.competitor.findFirst({
+            where: { clientId, platform: m.platform, handle: m.handle },
+            select: { id: true },
+          });
+          const competitorId =
+            existing?.id ??
+            (
+              await tx.competitor.create({
+                data: { clientId, platform: m.platform, handle: m.handle, url: m.url },
+                select: { id: true },
+              })
+            ).id;
+          await tx.competitorInsight.create({
+            data: {
+              competitorId,
+              metric: {
+                engagementRate: m.engagementRate,
+                postsPerWeek: m.postsPerWeek,
+                avgViews: m.avgViews,
+                topFormats: m.topFormats,
+                sampleSize: m.sampleSize,
+              } as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+      }),
+    getBrief: async (agencyId, clientId): Promise<CompetitorBrief | null> => {
+      const row = await prisma.client.findFirst({
+        where: { id: clientId, agencyId },
+        select: { competitorBrief: true },
+      });
+      if (!row || row.competitorBrief == null) return null;
+      return row.competitorBrief as unknown as CompetitorBrief;
     },
   };
 }

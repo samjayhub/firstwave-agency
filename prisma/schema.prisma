@@ -41,19 +41,20 @@ enum Role {
 }
 
 model Client {
-  id             String             @id @default(cuid())
-  agencyId       String
-  agency         Agency             @relation(fields: [agencyId], references: [id])
-  name           String
-  websiteUrl     String?
-  niche          String?
-  researchBrief  Json?
-  brandProfile   BrandProfile?
-  accounts       ConnectedAccount[]
-  competitors    Competitor[]
-  trends         Trend[]
-  plans          ContentPlan[]
-  createdAt      DateTime           @default(now())
+  id              String             @id @default(cuid())
+  agencyId        String
+  agency          Agency             @relation(fields: [agencyId], references: [id])
+  name            String
+  websiteUrl      String?
+  niche           String?
+  researchBrief   Json?
+  competitorBrief Json?
+  brandProfile    BrandProfile?
+  accounts        ConnectedAccount[]
+  competitors     Competitor[]
+  trends          Trend[]
+  plans           ContentPlan[]
+  createdAt       DateTime           @default(now())
 
   @@index([agencyId])
 }

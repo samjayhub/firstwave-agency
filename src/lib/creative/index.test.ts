@@ -48,6 +48,7 @@ describe("CreativeStudioService.generateImage", () => {
     expect(provider.calls[0]!.style.palette).toContain("#0a1f44");
     expect(await assets.listForItem("ag1", "item_1")).toHaveLength(1);
     expect(sink.records[0]!.action).toBe("image_generation");
+    expect(sink.records[0]!.model).toBe("fake-image-1"); // real model on the record
   });
 
   it("uses a prompt override when provided", async () => {

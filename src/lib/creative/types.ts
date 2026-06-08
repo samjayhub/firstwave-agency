@@ -34,6 +34,13 @@ export interface StoredObject {
   key: string;
 }
 
+export interface StoredBytes {
+  bytes: Buffer;
+  contentType: string;
+}
+
 export interface AssetStorage {
   put(key: string, bytes: Buffer, contentType: string): Promise<StoredObject>;
+  /** Fetch a stored object's bytes (for the tenant-checked streamer). */
+  get(key: string): Promise<StoredBytes | null>;
 }

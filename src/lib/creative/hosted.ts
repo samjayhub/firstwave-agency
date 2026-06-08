@@ -39,7 +39,8 @@ export class HostedImageProvider implements CreativeProvider {
           width: req.width ?? 1024,
           height: req.height ?? 1024,
         }),
-        signal: AbortSignal.timeout(this.opts.timeoutMs ?? 60_000),
+        // Below the route's maxDuration (60s) so a mapped error wins the race.
+        signal: AbortSignal.timeout(this.opts.timeoutMs ?? 55_000),
       });
     } catch (err) {
       throw new ExternalServiceError("Image generation request failed", { cause: err });

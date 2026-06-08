@@ -23,6 +23,11 @@ describe("LocalAssetStorage", () => {
       expect(out.url).toBe("/assets/client1/item1/x.png");
       const written = await readFile(join(base, "client1/item1/x.png"));
       expect(written.toString()).toBe("PNGDATA");
+
+      const got = await store.get("client1/item1/x.png");
+      expect(got?.bytes.toString()).toBe("PNGDATA");
+      expect(got?.contentType).toBe("image/png");
+      expect(await store.get("client1/item1/missing.png")).toBeNull();
     } finally {
       await rm(base, { recursive: true, force: true });
     }

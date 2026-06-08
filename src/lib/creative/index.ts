@@ -92,7 +92,7 @@ export class CreativeStudioService {
 
     const result = await withAudit(this.deps.sink, meta, async () => {
       const r = await this.deps.provider.generateImage(req);
-      return { result: r, outputSummary: r.model };
+      return { result: r, outputSummary: r.model, model: r.model };
     });
 
     const key = `${item.clientId}/${itemId}/${this.idGen()}.png`;

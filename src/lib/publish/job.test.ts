@@ -8,6 +8,7 @@ import {
 import type { Publisher } from "@/lib/publishers/types";
 import type { StoredCopy } from "@/lib/content/types";
 import type { ItemStatus } from "@/lib/approval";
+import { ExternalServiceError } from "@/lib/errors/app-error";
 
 const STORED: StoredCopy = {
   platform: "linkedin",
@@ -88,6 +89,55 @@ describe("runPublishJob", () => {
     };
     await runPublishJob(deps, data(connectedAccountId));
     expect(usedToken).toBe("decrypted(ENCRYPTED)");
+  });
+
+  it("keeps the item scheduled between retries, then succeeds on a later attempt", async () => {
+    const { approval, accounts, jobs, connectedAccountId } = await setup();
+    let attempt = 0;
+    const deps: PublishJobDeps = {
+      approval,
+      accounts,
+      jobs,
+      resolvePublisher: () =>
+        publisher({
+          publish: async () => {
+            attempt++;
+            if (attempt === 1) throw new ExternalServiceError("LinkedIn 503");
+            return { externalId: "urn:li:share:2" };
+          },
+        }),
+      decrypt: (s) => s,
+    };
+    // Attempt 1 (not final): transient failure → item must remain scheduled.
+    await expect(
+      runPublishJob(deps, data(connectedAccountId), { finalAttempt: false }),
+    ).rejects.toThrow();
+    expect((await approval.get("ag1", "item_1"))!.status).toBe("scheduled");
+    // Attempt 2: retry actually re-attempts and succeeds.
+    const out = await runPublishJob(deps, data(connectedAccountId), { finalAttempt: false });
+    expect(out.state).toBe("published");
+    expect((await approval.get("ag1", "item_1"))!.status).toBe("published");
+  });
+
+  it("is idempotent: an already-published item is not re-posted", async () => {
+    const { approval, accounts, jobs, connectedAccountId } = await setup({ status: "published" });
+    let posted = 0;
+    const deps: PublishJobDeps = {
+      approval,
+      accounts,
+      jobs,
+      resolvePublisher: () =>
+        publisher({
+          publish: async () => {
+            posted++;
+            return { externalId: "x" };
+          },
+        }),
+      decrypt: (s) => s,
+    };
+    const out = await runPublishJob(deps, data(connectedAccountId));
+    expect(out.state).toBe("published");
+    expect(posted).toBe(0); // did not call the publisher again
   });
 
   it("enforces the human gate: refuses an item that is not scheduled", async () => {

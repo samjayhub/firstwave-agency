@@ -7,7 +7,9 @@ import { requireEnv } from "@/lib/config/env";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;
-// Version prefix so TOKEN_ENCRYPTION_KEY can be rotated later (select key by version).
+// Version prefix on the ciphertext. Today only "v1" exists and decrypt always
+// uses the current key; the prefix is the hook that lets a future change select
+// a key by version for rotation (TODO: multi-key rotation).
 const VERSION = "v1";
 
 function deriveKey(secret: string): Buffer {

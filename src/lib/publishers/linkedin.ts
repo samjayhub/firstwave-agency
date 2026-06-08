@@ -89,7 +89,12 @@ export class LinkedInPublisher implements Publisher {
     };
   }
 
-  async publish({ accessToken, authorId, caption }: PublishInput): Promise<PublishResult> {
+  async publish({ accessToken, authorId, caption, mediaUrls }: PublishInput): Promise<PublishResult> {
+    if (mediaUrls && mediaUrls.length > 0) {
+      // Media requires register-upload + asset URN flow — Phase 2. Fail loudly
+      // rather than silently dropping the media.
+      throw new ExternalServiceError("LinkedIn media posts are not supported yet (Phase 2)");
+    }
     const body = {
       author: authorId,
       lifecycleState: "PUBLISHED",

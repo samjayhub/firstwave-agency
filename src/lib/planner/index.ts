@@ -29,17 +29,17 @@ export interface ContentPlanResult {
   items: Array<{ contentItemId: string; brief: PlanItemBrief }>;
 }
 
-// NOTE: these methods scope by clientId only and assume the CALLER has already
-// verified the client belongs to the agency (ContentPlannerService does this via
-// clients.get before invoking them). Do not call directly from a request without
-// that ownership check.
+// Isolation is enforced in the query predicate (agencyId), not via a prior read —
+// consistent with the rest of the repository layer.
 export interface ContentPlanStore {
   createPlanWithItems(
+    agencyId: string,
     clientId: string,
     startDate: Date,
     items: NewPlanItem[],
   ): Promise<ContentPlanResult>;
   latestForClient(
+    agencyId: string,
     clientId: string,
   ): Promise<{ planId: string; startDate: Date; items: Array<{ contentItemId: string; copy: StoredCopy | null }> } | null>;
 }
@@ -72,6 +72,10 @@ function addDays(start: Date, days: number): Date {
   const d = new Date(start.getTime());
   d.setUTCDate(d.getUTCDate() + days);
   return d;
+}
+
+function startOfUtcDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
 /** Validate + normalize the model's plan against the requested window/platforms. */
@@ -150,17 +154,18 @@ export class ContentPlannerService {
       return { result: parsed, outputSummary: `${parsed.length} plan items` };
     });
 
-    const startDate = input.startDate ?? this.clock();
+    // Normalize to UTC midnight so a 30-day calendar lands on day boundaries.
+    const startDate = input.startDate ?? startOfUtcDay(this.clock());
     const items: NewPlanItem[] = briefs.map((brief) => ({
       scheduledAt: addDays(startDate, brief.day - 1),
       copy: { platform: brief.platform, brief },
     }));
 
-    return this.deps.plans.createPlanWithItems(input.clientId, startDate, items);
+    return this.deps.plans.createPlanWithItems(ctx.agencyId, input.clientId, startDate, items);
   }
 
   async latest(ctx: TenantContext, clientId: string) {
     await this.deps.clients.get(ctx, clientId);
-    return this.deps.plans.latestForClient(clientId);
+    return this.deps.plans.latestForClient(ctx.agencyId, clientId);
   }
 }

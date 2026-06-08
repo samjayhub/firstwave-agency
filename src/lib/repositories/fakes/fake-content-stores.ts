@@ -9,29 +9,35 @@ interface ItemRow {
   clientId: string;
   planId: string;
   copy: StoredCopy;
+  scheduledAt?: Date;
 }
 
 export class FakeContentPlanStore implements ContentPlanStore {
-  readonly plans: Array<{ planId: string; clientId: string; startDate: Date }> = [];
+  readonly plans: Array<{ planId: string; agencyId: string; clientId: string; startDate: Date }> = [];
   readonly items: ItemRow[] = [];
   private pSeq = 0;
   private iSeq = 0;
 
-  constructor(private readonly agencyOf: (clientId: string) => string = () => "ag1") {}
-
-  async createPlanWithItems(clientId: string, startDate: Date, items: NewPlanItem[]) {
+  async createPlanWithItems(
+    agencyId: string,
+    clientId: string,
+    startDate: Date,
+    items: NewPlanItem[],
+  ) {
     const planId = `plan_${++this.pSeq}`;
-    this.plans.push({ planId, clientId, startDate });
+    this.plans.push({ planId, agencyId, clientId, startDate });
     const out = items.map((it) => {
       const id = `item_${++this.iSeq}`;
-      this.items.push({ id, agencyId: this.agencyOf(clientId), clientId, planId, copy: it.copy });
+      this.items.push({ id, agencyId, clientId, planId, copy: it.copy, scheduledAt: it.scheduledAt });
       return { contentItemId: id, brief: it.copy.brief };
     });
     return { planId, items: out };
   }
 
-  async latestForClient(clientId: string) {
-    const plan = [...this.plans].reverse().find((p) => p.clientId === clientId);
+  async latestForClient(agencyId: string, clientId: string) {
+    const plan = [...this.plans]
+      .reverse()
+      .find((p) => p.clientId === clientId && p.agencyId === agencyId);
     if (!plan) return null;
     return {
       planId: plan.planId,

@@ -2,6 +2,7 @@
 // from the repository logic so tests never import PrismaClient. The `select`
 // pins the returned shape to the record type the repository expects.
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { NotFoundError } from "@/lib/errors/app-error";
 import type { ClientStore } from "./client-repository";
 import type { AuthStore } from "@/lib/auth/auth-service";
 // Type-only imports keep the brand-intel/LLM runtime out of route bundles.
@@ -80,8 +81,14 @@ export function prismaBrandProfileStore(prisma: PrismaClient): BrandProfileStore
 
 export function prismaContentPlanStore(prisma: PrismaClient): ContentPlanStore {
   return {
-    createPlanWithItems: (clientId, startDate, items) =>
+    createPlanWithItems: (agencyId, clientId, startDate, items) =>
       prisma.$transaction(async (tx) => {
+        // Isolation in the predicate: the client must belong to the agency.
+        const client = await tx.client.findFirst({
+          where: { id: clientId, agencyId },
+          select: { id: true },
+        });
+        if (!client) throw new NotFoundError("Client not found");
         const plan = await tx.contentPlan.create({
           data: { clientId, startDate },
           select: { id: true },
@@ -101,9 +108,9 @@ export function prismaContentPlanStore(prisma: PrismaClient): ContentPlanStore {
         }
         return { planId: plan.id, items: out };
       }),
-    latestForClient: async (clientId) => {
+    latestForClient: async (agencyId, clientId) => {
       const plan = await prisma.contentPlan.findFirst({
-        where: { clientId },
+        where: { clientId, client: { agencyId } },
         orderBy: { createdAt: "desc" },
         select: { id: true, startDate: true, items: { select: { id: true, copy: true } } },
       });

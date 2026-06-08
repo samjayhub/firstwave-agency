@@ -4,8 +4,20 @@ import { FakeLlmProvider } from "@/lib/llm/fake";
 import { InMemoryAuditSink } from "@/lib/audit";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import { FakeClientStore } from "@/lib/repositories/fakes/fake-client-store";
-import { FakeContentPlanStore } from "@/lib/repositories/fakes/fake-content-stores";
+import {
+  FakeContentItemStore,
+  FakeContentPlanStore,
+} from "@/lib/repositories/fakes/fake-content-stores";
 import { FakeBrandProfileStore } from "@/lib/brand-intel/fakes/fake-brand-intel";
+import { CopyEngineService } from "@/lib/copy";
+import type { StoredCopy } from "@/lib/content/types";
+
+const COPY_JSON = JSON.stringify({
+  caption: "c",
+  hook: "h",
+  hashtags: ["a"],
+  description: "d",
+});
 
 const PLAN_JSON = JSON.stringify([
   { day: 1, platform: "linkedin", pillar: "education", format: "text", idea: "Tip 1" },
@@ -21,7 +33,7 @@ async function setup() {
   const client = await clients.create({ agencyId: "ag1" }, { name: "Acme" });
   const brandProfiles = new FakeBrandProfileStore();
   await brandProfiles.upsert(client.id, { palette: [], fonts: [], voice: VOICE });
-  const plans = new FakeContentPlanStore(() => "ag1");
+  const plans = new FakeContentPlanStore();
   const sink = new InMemoryAuditSink();
   const svc = new ContentPlannerService({
     llm: FakeLlmProvider.constant(PLAN_JSON),
@@ -93,5 +105,41 @@ describe("ContentPlannerService.generate", () => {
     await expect(
       svc.generate({ agencyId: "intruder" }, { clientId: client.id }),
     ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("schedules day 1 on startDate and day 2 the next day (UTC)", async () => {
+    const { svc, client, plans } = await setup();
+    await svc.generate({ agencyId: "ag1" }, { clientId: client.id });
+    const day1 = plans.items.find((i) => i.copy.brief.day === 1);
+    const day2 = plans.items.find((i) => i.copy.brief.day === 2);
+    expect(day1?.scheduledAt?.toISOString()).toBe("2026-06-08T00:00:00.000Z");
+    expect(day2?.scheduledAt?.toISOString()).toBe("2026-06-09T00:00:00.000Z");
+  });
+
+  it("planner output round-trips cleanly through the copy engine", async () => {
+    const { svc, client, plans } = await setup();
+    await svc.generate({ agencyId: "ag1" }, { clientId: client.id });
+    const planned = plans.items[0]!; // { platform, brief } written by the planner
+
+    const itemStore = new FakeContentItemStore();
+    itemStore.seed({
+      id: planned.id,
+      agencyId: "ag1",
+      clientId: planned.clientId,
+      planId: planned.planId,
+      copy: planned.copy,
+    });
+    const copyEngine = new CopyEngineService({
+      llm: FakeLlmProvider.constant(COPY_JSON),
+      sink: new InMemoryAuditSink(),
+      model: "m",
+      items: itemStore,
+      brandProfiles: new FakeBrandProfileStore(),
+    });
+
+    const gen = await copyEngine.write({ agencyId: "ag1" }, planned.id);
+    expect(gen.caption).toBe("c");
+    const stored = await itemStore.findForAgency("ag1", planned.id);
+    expect((stored!.copy as StoredCopy).generated?.caption).toBe("c");
   });
 });

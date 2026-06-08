@@ -4,6 +4,7 @@ import { ValidationError } from "@/lib/errors/app-error";
 import type { Platform, Publisher } from "./types";
 import { LinkedInPublisher } from "./linkedin";
 import { MetaPublisher } from "./meta";
+import { YouTubePublisher } from "./youtube";
 
 export function getPublisher(platform: Platform): Publisher {
   switch (platform) {
@@ -19,8 +20,13 @@ export function getPublisher(platform: Platform): Publisher {
         appId: requireEnv("META_APP_ID"),
         appSecret: requireEnv("META_APP_SECRET"),
       });
+    case "youtube":
+      return new YouTubePublisher({
+        clientId: requireEnv("YOUTUBE_CLIENT_ID"),
+        clientSecret: requireEnv("YOUTUBE_CLIENT_SECRET"),
+      });
     default:
-      // youtube/tiktok/pinterest = later Phase 2; x = paid (deferred).
+      // tiktok/pinterest = later Phase 2; x = paid (deferred).
       throw new ValidationError(`No publisher adapter for platform "${platform}"`);
   }
 }

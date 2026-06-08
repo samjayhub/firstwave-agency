@@ -43,7 +43,9 @@ export async function GET(req: Request, { params }: { params: { platform: string
     const redirectUri =
       platform === "meta_fb" || platform === "meta_ig"
         ? requireEnv("META_REDIRECT_URI")
-        : requireEnv("LINKEDIN_REDIRECT_URI");
+        : platform === "youtube"
+          ? requireEnv("YOUTUBE_REDIRECT_URI")
+          : requireEnv("LINKEDIN_REDIRECT_URI");
     // completeConnection.create verifies the client belongs to this agency.
     const { accountId } = await connectionService().completeConnection(
       auth.ctx,

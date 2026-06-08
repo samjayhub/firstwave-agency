@@ -1,5 +1,6 @@
-// Data model sketch — see docs/03-data-model.md for full notes.
-// Phase 0: structure only. Refine types/indexes + enable pgvector during Phase 1.
+// Data model — see docs/03-data-model.md for full notes.
+// Phase 1: models + initial migration are live. pgvector (brand/competitor
+// embeddings) is enabled in a later phase via a preview feature + migration.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,11 +14,12 @@ datasource db {
 
 // ── Tenancy ────────────────────────────────────────────────
 model Agency {
-  id        String   @id @default(cuid())
-  name      String
-  users     User[]
-  clients   Client[]
-  createdAt DateTime @default(now())
+  id           String       @id @default(cuid())
+  name         String
+  users        User[]
+  clients      Client[]
+  aiAuditLogs  AiAuditLog[]
+  createdAt    DateTime     @default(now())
 }
 
 model User {
@@ -210,4 +212,28 @@ model AnalyticsSnapshot {
   publishJob   PublishJob @relation(fields: [publishJobId], references: [id])
   metrics      Json // impressions, likes, comments, shares, watchTime
   capturedAt   DateTime   @default(now())
+}
+
+// ── AI audit trail ─────────────────────────────────────────
+// Persisted record of every generative/LLM action (see src/lib/audit).
+// Mirrors AiAuditRecord field-for-field. Rule-based features are AUDIT-EXEMPT.
+model AiAuditLog {
+  id               String   @id @default(cuid())
+  agencyId         String
+  agency           Agency   @relation(fields: [agencyId], references: [id])
+  clientId         String?
+  action           String
+  provider         String
+  model            String
+  status           String
+  inputSummary     String
+  outputSummary    String?
+  promptTokens     Int?
+  completionTokens Int?
+  latencyMs        Int?
+  error            String?
+  createdAt        DateTime @default(now())
+
+  @@index([agencyId, createdAt])
+  @@index([clientId])
 }

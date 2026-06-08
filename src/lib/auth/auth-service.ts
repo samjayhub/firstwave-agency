@@ -1,7 +1,9 @@
-// Auth service — signup (creates an Agency + its admin User) and login. Depends
-// on narrow store interfaces (not Prisma) so it is testable with fakes. Hashing
-// and token signing are injectable for the same reason.
+// Auth service — signup (creates an Agency + its admin User atomically) and
+// login. Depends on a narrow AuthStore (not Prisma) so it is testable with a
+// fake. Hashing and token signing are injectable for the same reason. Store
+// calls go through withDbErrors so a unique-constraint race maps to 409, not 500.
 import { ConflictError, UnauthorizedError } from "@/lib/errors/app-error";
+import { withDbErrors } from "@/lib/db/errors";
 import { hashPassword, verifyPassword } from "./password";
 import { signSession, type SessionClaims } from "./jwt";
 import type { Role } from "./roles";
@@ -27,18 +29,15 @@ export interface PublicUser {
   role: Role;
 }
 
-export interface AgencyStore {
-  create(data: { name: string }): Promise<AgencyRecord>;
-}
-
-export interface UserStore {
-  create(data: {
-    agencyId: string;
+/** Cohesive persistence boundary for auth. createAgencyWithAdmin MUST be atomic. */
+export interface AuthStore {
+  findUserByEmail(email: string): Promise<AuthUserRecord | null>;
+  createAgencyWithAdmin(input: {
+    agencyName: string;
     email: string;
     role: Role;
     passwordHash: string;
-  }): Promise<AuthUserRecord>;
-  findByEmail(email: string): Promise<AuthUserRecord | null>;
+  }): Promise<{ agency: AgencyRecord; user: AuthUserRecord }>;
 }
 
 export interface SignupInput {
@@ -56,8 +55,7 @@ export interface AuthResult {
 }
 
 export interface AuthServiceDeps {
-  agencies: AgencyStore;
-  users: UserStore;
+  store: AuthStore;
   secret: string;
   hash?: (password: string) => Promise<string>;
   verify?: (password: string, stored: string) => Promise<boolean>;
@@ -83,35 +81,52 @@ export class AuthService {
   }
 
   /** A valid hash to verify against when no user exists, so login does equal
-   *  work on both branches (defeats user-enumeration via timing). Computed once. */
+   *  work on both branches (defeats user-enumeration via timing). Computed once;
+   *  a rejected attempt is not cached. */
   private getDummyHash(): Promise<string> {
-    if (!this.dummyHash) this.dummyHash = this.hash("timing-equalizer-placeholder");
+    if (!this.dummyHash) {
+      this.dummyHash = this.hash("timing-equalizer-placeholder").catch((err) => {
+        this.dummyHash = undefined;
+        throw err;
+      });
+    }
     return this.dummyHash;
   }
 
   async signup(input: SignupInput): Promise<AuthResult> {
     const email = normalizeEmail(input.email);
-    const existing = await this.deps.users.findByEmail(email);
+    const existing = await withDbErrors(
+      () => this.deps.store.findUserByEmail(email),
+      "User",
+    );
     if (existing) throw new ConflictError("An account with this email already exists");
 
     const passwordHash = await this.hash(input.password);
-    const agency = await this.deps.agencies.create({ name: input.agencyName.trim() });
-    const user = await this.deps.users.create({
-      agencyId: agency.id,
-      email,
-      role: "agency_admin", // first user of a new agency is its admin
-      passwordHash,
-    });
+    // Atomic: a failed user insert rolls back the agency (no orphan); a unique
+    // race surfaces as P2002 -> ConflictError (409) via withDbErrors.
+    const { user } = await withDbErrors(
+      () =>
+        this.deps.store.createAgencyWithAdmin({
+          agencyName: input.agencyName.trim(),
+          email,
+          role: "agency_admin", // first user of a new agency is its admin
+          passwordHash,
+        }),
+      "User",
+    );
 
     return { token: this.tokenFor(user), user: toPublic(user) };
   }
 
   async login(input: LoginInput): Promise<AuthResult> {
     const email = normalizeEmail(input.email);
-    const user = await this.deps.users.findByEmail(email);
+    const user = await withDbErrors(
+      () => this.deps.store.findUserByEmail(email),
+      "User",
+    );
     // Generic message AND equal work on both branches: when no user exists, still
-    // run a verify against a dummy hash so the response time can't reveal whether
-    // the email is registered (no enumeration timing oracle).
+    // run a verify against a dummy hash so response time can't reveal whether the
+    // email is registered.
     if (!user) {
       await this.verify(input.password, await this.getDummyHash());
       throw new UnauthorizedError("Invalid email or password");

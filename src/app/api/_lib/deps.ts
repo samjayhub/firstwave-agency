@@ -7,16 +7,13 @@ import { requireAuth, type AuthContext } from "@/lib/auth/guard";
 import { readSessionToken } from "@/lib/auth/session";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import {
-  prismaAgencyStore,
+  prismaAuthStore,
   prismaClientStore,
-  prismaUserStore,
 } from "@/lib/repositories/prisma-stores";
 
 export function authService(): AuthService {
-  const prisma = getPrisma();
   return new AuthService({
-    agencies: prismaAgencyStore(prisma),
-    users: prismaUserStore(prisma),
+    store: prismaAuthStore(getPrisma()),
     secret: requireEnv("JWT_SECRET"),
   });
 }

@@ -3,7 +3,7 @@
 // pins the returned shape to the record type the repository expects.
 import type { PrismaClient } from "@prisma/client";
 import type { ClientStore } from "./client-repository";
-import type { AgencyStore, UserStore } from "@/lib/auth/auth-service";
+import type { AuthStore } from "@/lib/auth/auth-service";
 
 const CLIENT_SELECT = {
   id: true,
@@ -28,13 +28,6 @@ export function prismaClientStore(prisma: PrismaClient): ClientStore {
   };
 }
 
-export function prismaAgencyStore(prisma: PrismaClient): AgencyStore {
-  return {
-    create: ({ name }) =>
-      prisma.agency.create({ data: { name }, select: { id: true, name: true } }),
-  };
-}
-
 const AUTH_USER_SELECT = {
   id: true,
   agencyId: true,
@@ -43,10 +36,23 @@ const AUTH_USER_SELECT = {
   passwordHash: true,
 } as const;
 
-export function prismaUserStore(prisma: PrismaClient): UserStore {
+export function prismaAuthStore(prisma: PrismaClient): AuthStore {
   return {
-    create: (data) => prisma.user.create({ data, select: AUTH_USER_SELECT }),
-    findByEmail: (email) =>
+    findUserByEmail: (email) =>
       prisma.user.findUnique({ where: { email }, select: AUTH_USER_SELECT }),
+    // Single transaction: if the user insert fails (e.g. unique-email race), the
+    // agency insert rolls back — no orphaned agency.
+    createAgencyWithAdmin: ({ agencyName, email, role, passwordHash }) =>
+      prisma.$transaction(async (tx) => {
+        const agency = await tx.agency.create({
+          data: { name: agencyName },
+          select: { id: true, name: true },
+        });
+        const user = await tx.user.create({
+          data: { agencyId: agency.id, email, role, passwordHash },
+          select: AUTH_USER_SELECT,
+        });
+        return { agency, user };
+      }),
   };
 }

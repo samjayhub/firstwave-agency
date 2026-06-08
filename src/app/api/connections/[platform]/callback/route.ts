@@ -39,11 +39,15 @@ export async function GET(req: Request, { params }: { params: { platform: string
       throw new ValidationError("State does not match callback");
     }
 
-    const redirectUri = requireEnv("LINKEDIN_REDIRECT_URI");
+    const platform = params.platform as Platform;
+    const redirectUri =
+      platform === "meta_fb" || platform === "meta_ig"
+        ? requireEnv("META_REDIRECT_URI")
+        : requireEnv("LINKEDIN_REDIRECT_URI");
     // completeConnection.create verifies the client belongs to this agency.
     const { accountId } = await connectionService().completeConnection(
       auth.ctx,
-      params.platform as Platform,
+      platform,
       state.clientId,
       code,
       redirectUri,

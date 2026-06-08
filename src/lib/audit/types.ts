@@ -12,7 +12,8 @@ export type AiAction =
   | "copy_generation"
   | "image_generation"
   | "competitor_analysis"
-  | "trend_analysis";
+  | "trend_analysis"
+  | "research_brief";
 
 export type AiAuditStatus = "success" | "error";
 

@@ -21,6 +21,7 @@ import type { ApprovalStore, ItemStatus } from "@/lib/approval";
 import type { ConnectedAccountRepository } from "@/lib/connections";
 import type { PublishJobStore } from "@/lib/publish/job";
 import type { Platform } from "@/lib/publishers/types";
+import type { ResearchBrief, ResearchBriefStore } from "@/lib/research/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -332,6 +333,25 @@ export function prismaPublishJobStore(prisma: PrismaClient): PublishJobStore {
           error: result.error ?? null,
         },
       });
+    },
+  };
+}
+
+export function prismaResearchBriefStore(prisma: PrismaClient): ResearchBriefStore {
+  return {
+    saveBrief: async (agencyId, clientId, brief) => {
+      await prisma.client.updateMany({
+        where: { id: clientId, agencyId },
+        data: { researchBrief: brief as unknown as Prisma.InputJsonValue },
+      });
+    },
+    getBrief: async (agencyId, clientId) => {
+      const row = await prisma.client.findFirst({
+        where: { id: clientId, agencyId },
+        select: { researchBrief: true },
+      });
+      if (!row || row.researchBrief == null) return null;
+      return row.researchBrief as unknown as ResearchBrief;
     },
   };
 }

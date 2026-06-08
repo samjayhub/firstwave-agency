@@ -2,7 +2,8 @@
 // swap to an S3/R2-backed implementation later (same interface). InMemory is for
 // tests.
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
+import { ValidationError } from "@/lib/errors/app-error";
 import type { AssetStorage, StoredObject } from "./types";
 
 export class LocalAssetStorage implements AssetStorage {
@@ -13,6 +14,11 @@ export class LocalAssetStorage implements AssetStorage {
 
   async put(key: string, bytes: Buffer, _contentType: string): Promise<StoredObject> {
     const path = join(this.baseDir, key);
+    // Defense-in-depth: never write outside the base dir even if a key is crafted.
+    const root = resolve(this.baseDir);
+    if (!resolve(path).startsWith(root + sep)) {
+      throw new ValidationError("Invalid asset key");
+    }
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, bytes);
     return { key, url: `${this.urlPrefix}/${key}` };

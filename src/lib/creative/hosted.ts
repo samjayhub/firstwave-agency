@@ -17,7 +17,7 @@ export class HostedImageProvider implements CreativeProvider {
   constructor(
     private readonly apiKey: string,
     private readonly provider: "imagen" | "ideogram",
-    private readonly opts: { fetchFn?: FetchFn; endpoint?: string } = {},
+    private readonly opts: { fetchFn?: FetchFn; endpoint?: string; timeoutMs?: number } = {},
   ) {}
 
   async generateImage(req: ImageRequest): Promise<ImageResult> {
@@ -39,6 +39,7 @@ export class HostedImageProvider implements CreativeProvider {
           width: req.width ?? 1024,
           height: req.height ?? 1024,
         }),
+        signal: AbortSignal.timeout(this.opts.timeoutMs ?? 60_000),
       });
     } catch (err) {
       throw new ExternalServiceError("Image generation request failed", { cause: err });

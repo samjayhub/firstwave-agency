@@ -32,6 +32,8 @@ export interface AiCallResult<T> {
   outputSummary?: string;
   promptTokens?: number;
   completionTokens?: number;
+  /** Overrides meta.model on the record when the model is only known post-call. */
+  model?: string;
 }
 
 export type AiAuditMeta = Pick<
@@ -56,6 +58,7 @@ export async function withAudit<T>(
     const finishedAt = clock();
     await sink.record({
       ...meta,
+      model: out.model ?? meta.model,
       status: "success",
       outputSummary: out.outputSummary,
       promptTokens: out.promptTokens,

@@ -1,6 +1,7 @@
-// Creative Studio provider interface. Abstracts image/video generation so
-// hosted APIs ↔ self-hosted open models is a config swap (docs/02 §5, §7).
-// Phase 0: types only. Video deferred to Phase 3.
+// Creative Studio provider interface. Abstracts image generation so hosted APIs
+// ↔ self-hosted open models is a config swap (docs/02 §5, §7). The provider
+// returns raw bytes; the studio stores them via an AssetStorage and records an
+// Asset row. Video deferred to Phase 3.
 
 export interface BrandStyle {
   palette: string[]; // hex
@@ -16,13 +17,30 @@ export interface ImageRequest {
   height?: number;
 }
 
-export interface GeneratedMedia {
-  url: string; // object storage
+export interface ImageResult {
+  bytes: Buffer;
+  contentType: string;
   model: string;
-  kind: "image" | "video";
 }
 
 export interface CreativeProvider {
-  generateImage(req: ImageRequest): Promise<GeneratedMedia>;
-  // generateVideo(req: VideoRequest): Promise<GeneratedMedia>;  // Phase 3
+  generateImage(req: ImageRequest): Promise<ImageResult>;
+}
+
+// ── Object storage abstraction (local fs for MVP → S3/R2 later) ──
+export interface StoredObject {
+  /** Where the object can be fetched from (path or public URL). */
+  url: string;
+  key: string;
+}
+
+export interface StoredBytes {
+  bytes: Buffer;
+  contentType: string;
+}
+
+export interface AssetStorage {
+  put(key: string, bytes: Buffer, contentType: string): Promise<StoredObject>;
+  /** Fetch a stored object's bytes (for the tenant-checked streamer). */
+  get(key: string): Promise<StoredBytes | null>;
 }

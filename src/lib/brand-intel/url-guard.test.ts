@@ -30,6 +30,7 @@ describe("isPrivateIp (IPv6)", () => {
     expect(isPrivateIp("fe80::1")).toBe(true);
     expect(isPrivateIp("fd00::1")).toBe(true);
     expect(isPrivateIp("::ffff:169.254.169.254")).toBe(true);
+    expect(isPrivateIp("::ffff:7f00:1")).toBe(true); // v4-mapped hex (loopback)
   });
 
   it("allows public IPv6", () => {

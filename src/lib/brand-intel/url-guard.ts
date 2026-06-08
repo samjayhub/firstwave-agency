@@ -49,6 +49,10 @@ export function isPrivateIp(ip: string): boolean {
   if (host.startsWith("fc") || host.startsWith("fd")) return true; // fc00::/7 ULA
   const mapped = host.match(/::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (mapped) return isPrivateIpv4(mapped[1]!);
+  // v4-mapped in hex form (e.g. ::ffff:7f00:1 after URL normalization). These
+  // are not legitimate public crawl targets — treat any v4-mapped literal as
+  // unsafe to close the metadata/loopback reach-around.
+  if (host.startsWith("::ffff:")) return true;
   return false; // unknown IPv6 → treat as public (best effort)
 }
 

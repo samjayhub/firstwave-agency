@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { handle, ok, readJson } from "@/app/api/_lib/respond";
 import { authService } from "@/app/api/_lib/deps";
+import { assertSameOrigin } from "@/app/api/_lib/csrf";
+import { clientIp, enforceLimit, signupLimiter } from "@/app/api/_lib/rate-limit";
 import { sessionCookie } from "@/lib/auth/session";
 import { ValidationError } from "@/lib/errors/app-error";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
@@ -15,6 +17,9 @@ const SignupSchema = z.object({
 
 export async function POST(req: Request) {
   return handle(async () => {
+    assertSameOrigin(req);
+    await enforceLimit(signupLimiter, `signup:${clientIp(req)}`);
+
     const parsed = SignupSchema.safeParse(await readJson(req));
     if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message);
 

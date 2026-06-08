@@ -74,11 +74,19 @@ export class AuthService {
   private readonly hash: (p: string) => Promise<string>;
   private readonly verify: (p: string, s: string) => Promise<boolean>;
   private readonly signToken: (c: SessionClaims, s: string) => string;
+  private dummyHash?: Promise<string>;
 
   constructor(private readonly deps: AuthServiceDeps) {
     this.hash = deps.hash ?? hashPassword;
     this.verify = deps.verify ?? verifyPassword;
     this.signToken = deps.signToken ?? signSession;
+  }
+
+  /** A valid hash to verify against when no user exists, so login does equal
+   *  work on both branches (defeats user-enumeration via timing). Computed once. */
+  private getDummyHash(): Promise<string> {
+    if (!this.dummyHash) this.dummyHash = this.hash("timing-equalizer-placeholder");
+    return this.dummyHash;
   }
 
   async signup(input: SignupInput): Promise<AuthResult> {
@@ -101,8 +109,11 @@ export class AuthService {
   async login(input: LoginInput): Promise<AuthResult> {
     const email = normalizeEmail(input.email);
     const user = await this.deps.users.findByEmail(email);
-    // Generic message + always run a verify-ish path to avoid user enumeration.
+    // Generic message AND equal work on both branches: when no user exists, still
+    // run a verify against a dummy hash so the response time can't reveal whether
+    // the email is registered (no enumeration timing oracle).
     if (!user) {
+      await this.verify(input.password, await this.getDummyHash());
       throw new UnauthorizedError("Invalid email or password");
     }
     const ok = await this.verify(input.password, user.passwordHash);

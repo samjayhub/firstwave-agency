@@ -66,4 +66,24 @@ describe("AuthService.login", () => {
       svc.login({ email: "nobody@b.com", password: "whatever1" }),
     ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
+
+  it("still runs a verify when the email is unknown (no timing oracle)", async () => {
+    const agencies = new FakeAgencyStore();
+    const users = new FakeUserStore();
+    let verifyCalls = 0;
+    const svc = new AuthService({
+      agencies,
+      users,
+      secret,
+      hash: async () => "scrypt$00$00",
+      verify: async () => {
+        verifyCalls++;
+        return false;
+      },
+    });
+    await expect(
+      svc.login({ email: "ghost@b.com", password: "whatever1" }),
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(verifyCalls).toBe(1); // dummy verify ran on the no-user branch
+  });
 });

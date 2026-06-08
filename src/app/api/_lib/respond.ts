@@ -3,7 +3,7 @@
 // logged (scrubbed) for diagnosis; 4xx are not noise-logged.
 import { NextResponse } from "next/server";
 import { toClientError } from "@/lib/errors/app-error";
-import { logger } from "@/lib/logger";
+import { logger, scrubSecrets } from "@/lib/logger";
 
 export function ok<T>(data: T, status = 200): NextResponse {
   return NextResponse.json(data, { status });
@@ -13,7 +13,7 @@ export function fail(err: unknown): NextResponse {
   const clientError = toClientError(err);
   if (clientError.status >= 500) {
     logger.error("request_error", {
-      message: err instanceof Error ? err.message : String(err),
+      message: scrubSecrets(err instanceof Error ? err.message : String(err)),
     });
   }
   return NextResponse.json(

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { handle, ok, readJson } from "@/app/api/_lib/respond";
 import { clientRepository, requireRequestAuth } from "@/app/api/_lib/deps";
+import { assertSameOrigin } from "@/app/api/_lib/csrf";
 import { ValidationError } from "@/lib/errors/app-error";
 
 export const runtime = "nodejs";
@@ -23,6 +24,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   return handle(async () => {
+    assertSameOrigin(req);
     const auth = requireRequestAuth();
     const parsed = UpdateSchema.safeParse(await readJson(req));
     if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message);

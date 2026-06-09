@@ -31,6 +31,7 @@ import type { BillingStore } from "@/lib/billing/types";
 import type { BrandingStore } from "@/lib/whitelabel/types";
 import type { DesignItemStore, DesignSpec } from "@/lib/design/types";
 import type { SchedulerStore } from "@/lib/scheduler/types";
+import type { PerformanceStore } from "@/lib/performance/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -401,6 +402,44 @@ export function prismaSchedulerStore(prisma: PrismaClient): SchedulerStore {
         data: { status: "scheduled" },
       });
       return res.count > 0;
+    },
+  };
+}
+
+export function prismaPerformanceStore(prisma: PrismaClient): PerformanceStore {
+  return {
+    recentPerformance: async (agencyId, clientId, limit) => {
+      // Published posts on this client that have at least one metrics snapshot,
+      // newest-published first, each joined to its LATEST snapshot + plan brief.
+      const jobs = await prisma.publishJob.findMany({
+        where: {
+          state: "published",
+          snapshots: { some: {} },
+          contentItem: { plan: { client: { id: clientId, agencyId } } },
+        },
+        select: {
+          platform: true,
+          contentItem: { select: { copy: true } },
+          snapshots: {
+            orderBy: { capturedAt: "desc" },
+            take: 1,
+            select: { metrics: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+      return jobs.map((j) => {
+        const copy = j.contentItem.copy as StoredCopy | null;
+        const metrics = (j.snapshots[0]?.metrics ?? {}) as PostMetrics;
+        return {
+          platform: j.platform as Platform,
+          ...(copy?.brief?.pillar ? { pillar: copy.brief.pillar } : {}),
+          ...(copy?.brief?.format ? { format: copy.brief.format } : {}),
+          ...(copy?.brief?.idea ? { idea: copy.brief.idea } : {}),
+          metrics,
+        };
+      });
     },
   };
 }

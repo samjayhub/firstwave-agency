@@ -9,10 +9,12 @@ import {
   prismaBrandProfileStore,
   prismaClientStore,
   prismaContentPlanStore,
+  prismaPerformanceStore,
 } from "@/lib/repositories/prisma-stores";
 import { PrismaAuditSink } from "@/lib/db/audit-sink";
 import { getLlmProvider, DEFAULT_LLM_MODEL } from "@/lib/llm";
 import { ContentPlannerService } from "@/lib/planner";
+import { PerformanceService } from "@/lib/performance";
 import { ValidationError } from "@/lib/errors/app-error";
 import type { Platform } from "@/lib/publishers/types";
 
@@ -28,6 +30,8 @@ function planner() {
     clients: new ClientRepository(prismaClientStore(prisma)),
     brandProfiles: prismaBrandProfileStore(prisma),
     plans: prismaContentPlanStore(prisma),
+    // Learning loop (P4-02): ground the next plan in past performance.
+    performance: new PerformanceService({ store: prismaPerformanceStore(prisma) }),
   });
 }
 

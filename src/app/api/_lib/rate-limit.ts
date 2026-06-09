@@ -40,6 +40,10 @@ export const trendLimiter = new InMemoryRateLimiter(6, 60 * MIN);
 // Manual scheduler tick (ops trigger; the cron heartbeat is the normal path) —
 // 12 per agency per hour.
 export const schedulerTickLimiter = new InMemoryRateLimiter(12, 60 * MIN);
+// Minting reviewer share links — 20 per agency+client per hour.
+export const reviewLinkLimiter = new InMemoryRateLimiter(20, 60 * MIN);
+// Reviewer decisions on a public share link — 60 per token per hour.
+export const reviewDecisionLimiter = new InMemoryRateLimiter(60, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

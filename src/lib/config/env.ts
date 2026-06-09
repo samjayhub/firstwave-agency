@@ -89,6 +89,11 @@ export const envSchema = z.object({
   NOTIFY_EMAIL_TOKEN: z.string().optional(),
   NOTIFY_MILESTONE_IMPRESSIONS: z.coerce.number().int().positive().default(10_000),
 
+  // Agency reporting (P4-07). Reuses the email endpoint above. REPORT_DIGEST_MS
+  // is the scheduled-digest cadence (default 7 days); 0 disables the schedule.
+  REPORT_DIGEST_MS: z.coerce.number().int().nonnegative().default(7 * 24 * 60 * 60 * 1000),
+  REPORT_PERIOD_DAYS: z.coerce.number().int().positive().default(30),
+
   // Billing — Stripe subscriptions for agencies (P3-05). Optional until billing
   // is switched on; required at the point each billing route runs.
   STRIPE_SECRET_KEY: z.string().optional(),

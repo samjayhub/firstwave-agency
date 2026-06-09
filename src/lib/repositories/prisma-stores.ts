@@ -34,6 +34,7 @@ import type { SchedulerStore } from "@/lib/scheduler/types";
 import type { PerformanceStore } from "@/lib/performance/types";
 import type { ReviewStore } from "@/lib/review/types";
 import type { NotificationKind, NotificationStore } from "@/lib/notifications/types";
+import type { ReportStore } from "@/lib/reporting/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -404,6 +405,64 @@ export function prismaSchedulerStore(prisma: PrismaClient): SchedulerStore {
         data: { status: "scheduled" },
       });
       return res.count > 0;
+    },
+  };
+}
+
+export function prismaReportStore(prisma: PrismaClient): ReportStore {
+  return {
+    snapshotsForClient: async (agencyId, clientId, since) => {
+      const jobs = await prisma.publishJob.findMany({
+        where: {
+          state: "published",
+          snapshots: { some: {} },
+          createdAt: { gte: since },
+          contentItem: { plan: { client: { id: clientId, agencyId } } },
+        },
+        select: {
+          platform: true,
+          createdAt: true,
+          contentItem: { select: { copy: true } },
+          snapshots: {
+            orderBy: { capturedAt: "desc" },
+            take: 1,
+            select: { metrics: true, capturedAt: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 500,
+      });
+      return jobs.map((j) => {
+        const copy = j.contentItem.copy as StoredCopy | null;
+        return {
+          platform: j.platform as Platform,
+          metrics: (j.snapshots[0]?.metrics ?? {}) as PostMetrics,
+          ...(copy?.brief?.idea ? { idea: copy.brief.idea } : {}),
+          capturedAt: j.snapshots[0]?.capturedAt ?? j.createdAt,
+        };
+      });
+    },
+    digestTargets: async () => {
+      const brandings = await prisma.agencyBranding.findMany({
+        where: { supportEmail: { not: null } },
+        select: {
+          agencyId: true,
+          supportEmail: true,
+          agency: { select: { clients: { select: { id: true, name: true } } } },
+        },
+      });
+      const targets = [];
+      for (const b of brandings) {
+        for (const c of b.agency.clients) {
+          targets.push({
+            agencyId: b.agencyId,
+            clientId: c.id,
+            clientName: c.name,
+            recipient: b.supportEmail!,
+          });
+        }
+      }
+      return targets;
     },
   };
 }

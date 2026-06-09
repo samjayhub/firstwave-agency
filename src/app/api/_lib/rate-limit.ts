@@ -44,6 +44,8 @@ export const schedulerTickLimiter = new InMemoryRateLimiter(12, 60 * MIN);
 export const reviewLinkLimiter = new InMemoryRateLimiter(20, 60 * MIN);
 // Reviewer decisions on a public share link — 60 per token per hour.
 export const reviewDecisionLimiter = new InMemoryRateLimiter(60, 60 * MIN);
+// Emailing a performance report — 20 per agency+client per hour.
+export const reportSendLimiter = new InMemoryRateLimiter(20, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

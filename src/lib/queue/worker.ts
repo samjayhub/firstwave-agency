@@ -54,7 +54,11 @@ import { getEnv } from "@/lib/config/env";
 import { NotificationService } from "@/lib/notifications";
 import { slackNotifier, httpEmailNotifier } from "@/lib/notifications/channels";
 import type { Notifier } from "@/lib/notifications/types";
-import { prismaNotificationStore } from "@/lib/repositories/prisma-stores";
+import { prismaNotificationStore, prismaReportStore } from "@/lib/repositories/prisma-stores";
+import { ReportService } from "@/lib/reporting";
+import { httpReportSender, logReportSender } from "@/lib/reporting/sender";
+import { registerReportDigest, type ReportDigestJobData } from "./report-digest-queue";
+import { prismaBrandingStore } from "@/lib/repositories/prisma-stores";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import { PrismaAuditSink } from "@/lib/db/audit-sink";
 import { getLlmProvider, DEFAULT_LLM_MODEL } from "@/lib/llm";
@@ -317,6 +321,36 @@ function startSchedulerWorker(): Worker<SchedulerTickJobData> {
   return worker;
 }
 
+function startReportDigestWorker(): Worker<ReportDigestJobData> {
+  const prisma = getPrisma();
+  const env = getEnv();
+  const sendEmail = env.NOTIFY_EMAIL_ENDPOINT
+    ? httpReportSender({
+        endpoint: env.NOTIFY_EMAIL_ENDPOINT,
+        ...(env.NOTIFY_EMAIL_TOKEN ? { token: env.NOTIFY_EMAIL_TOKEN } : {}),
+      })
+    : logReportSender;
+  const reports = new ReportService({
+    store: prismaReportStore(prisma),
+    branding: prismaBrandingStore(prisma),
+    clients: new ClientRepository(prismaClientStore(prisma)),
+    sendEmail,
+  });
+
+  const worker = new Worker<ReportDigestJobData>(
+    QUEUE_NAMES.reportDigest,
+    async () => reports.runDigest(getEnv().REPORT_PERIOD_DAYS),
+    { connection: redisConnection() },
+  );
+  worker.on("completed", (job) =>
+    logger.info("report digest completed", { jobId: job.id, sent: job.returnvalue?.sent }),
+  );
+  worker.on("failed", (job, err) =>
+    logger.error("report digest failed", { jobId: job?.id, message: err.message }),
+  );
+  return worker;
+}
+
 async function main() {
   startPublishWorker();
   startResearchWorker();
@@ -325,8 +359,10 @@ async function main() {
   startVideoWorker();
   startMetricsWorker();
   startSchedulerWorker();
-  // Install the repeatable heartbeat that drives auto-publishing (P4-01).
+  startReportDigestWorker();
+  // Install the repeatable heartbeats (P4-01 auto-publish, P4-07 report digest).
   await registerSchedulerTick();
+  const digestOn = await registerReportDigest();
   logger.info("worker started", {
     queues: [
       QUEUE_NAMES.publish,
@@ -336,6 +372,7 @@ async function main() {
       QUEUE_NAMES.produceVideo,
       QUEUE_NAMES.fetchMetrics,
       QUEUE_NAMES.schedulerTick,
+      ...(digestOn ? [QUEUE_NAMES.reportDigest] : []),
     ],
   });
 }

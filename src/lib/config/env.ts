@@ -52,6 +52,11 @@ export const envSchema = z.object({
   X_CLIENT_SECRET: z.string().optional(),
   X_REDIRECT_URI: z.string().url().optional(),
 
+  // Pinterest publishing — OAuth 2.0 + API v5 (P3-04).
+  PINTEREST_APP_ID: z.string().optional(),
+  PINTEREST_APP_SECRET: z.string().optional(),
+  PINTEREST_REDIRECT_URI: z.string().url().optional(),
+
   // Text-to-speech for the video narration track (P3-01). Fake until a key is set.
   TTS_PROVIDER: z.enum(["openai", "elevenlabs", "fake"]).default("fake"),
   TTS_API_KEY: z.string().optional(),

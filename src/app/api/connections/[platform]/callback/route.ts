@@ -49,7 +49,9 @@ export async function GET(req: Request, { params }: { params: { platform: string
             ? requireEnv("TIKTOK_REDIRECT_URI")
             : platform === "x"
               ? requireEnv("X_REDIRECT_URI")
-              : requireEnv("LINKEDIN_REDIRECT_URI");
+              : platform === "pinterest"
+                ? requireEnv("PINTEREST_REDIRECT_URI")
+                : requireEnv("LINKEDIN_REDIRECT_URI");
     // completeConnection.create verifies the client belongs to this agency.
     const { accountId } = await connectionService().completeConnection(
       auth.ctx,

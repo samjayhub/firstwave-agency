@@ -22,7 +22,8 @@ export const envSchema = z.object({
 
   // AI providers (metered compute — the one unavoidable cost).
   ANTHROPIC_API_KEY: z.string().optional(),
-  IMAGE_GEN_PROVIDER: z.enum(["imagen", "ideogram", "fake"]).default("fake"),
+  // `selfhosted` routes generation to an open model on our own GPU (P3-07).
+  IMAGE_GEN_PROVIDER: z.enum(["imagen", "ideogram", "selfhosted", "fake"]).default("fake"),
   IMAGE_GEN_API_KEY: z.string().optional(),
   // Competitor Intelligence — free YouTube Data API v3 key (P2-02).
   YOUTUBE_API_KEY: z.string().optional(),
@@ -57,13 +58,23 @@ export const envSchema = z.object({
   PINTEREST_APP_SECRET: z.string().optional(),
   PINTEREST_REDIRECT_URI: z.string().url().optional(),
 
-  // Text-to-speech for the video narration track (P3-01). Fake until a key is set.
-  TTS_PROVIDER: z.enum(["openai", "elevenlabs", "fake"]).default("fake"),
+  // Text-to-speech for the video narration track (P3-01). Fake until a key is set;
+  // `selfhosted` routes to an open speech model on our own GPU (P3-07).
+  TTS_PROVIDER: z.enum(["openai", "elevenlabs", "selfhosted", "fake"]).default("fake"),
   TTS_API_KEY: z.string().optional(),
   // Video assembly (P3-01). `ffmpeg` shells out to the local binary; `fake` stitches
   // a deterministic placeholder so the pipeline is end-to-end testable with no deps.
   VIDEO_ASSEMBLER: z.enum(["ffmpeg", "fake"]).default("fake"),
   FFMPEG_PATH: z.string().default("ffmpeg"),
+
+  // Self-hosted open gen models on our own GPU (P3-07). Set the *_URL and switch
+  // IMAGE_GEN_PROVIDER / TTS_PROVIDER to `selfhosted` to use them. The token is an
+  // optional bearer for the internal endpoint (omit on a trusted network).
+  SELF_HOSTED_IMAGE_URL: z.string().url().optional(),
+  SELF_HOSTED_IMAGE_MODEL: z.string().default("sdxl"),
+  SELF_HOSTED_TTS_URL: z.string().url().optional(),
+  SELF_HOSTED_TTS_MODEL: z.string().default("xtts-v2"),
+  SELF_HOSTED_GEN_TOKEN: z.string().optional(),
 
   // Generated-media storage. Local dir for MVP; swap to S3/R2 later.
   ASSET_STORAGE_DIR: z.string().default("./.assets"),

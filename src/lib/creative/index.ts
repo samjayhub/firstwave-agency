@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { TenantContext } from "@/lib/db/tenancy";
 import { withAudit, type AiAuditSink, type AiAuditMeta } from "@/lib/audit";
-import { getEnv } from "@/lib/config/env";
+import { getEnv, requireEnv } from "@/lib/config/env";
 import { NotFoundError, ValidationError } from "@/lib/errors/app-error";
 import type { BrandProfileStore } from "@/lib/brand-intel";
 import type { ContentItemStore } from "@/lib/copy";
@@ -12,6 +12,7 @@ import type { StoredCopy } from "@/lib/content/types";
 import type { AssetStorage, CreativeProvider, ImageRequest } from "./types";
 import { FakeCreativeProvider } from "./fake";
 import { HostedImageProvider } from "./hosted";
+import { SelfHostedImageProvider } from "./self-hosted";
 import { LocalAssetStorage } from "./asset-storage";
 
 export * from "./types";
@@ -117,6 +118,14 @@ export class CreativeStudioService {
 /** Production image provider — fake until a key/provider is configured. */
 export function getCreativeProvider(): CreativeProvider {
   const env = getEnv();
+  // Self-hosted open model on our own GPU — no API key, just the endpoint (P3-07).
+  if (env.IMAGE_GEN_PROVIDER === "selfhosted") {
+    return new SelfHostedImageProvider({
+      endpoint: requireEnv("SELF_HOSTED_IMAGE_URL"),
+      model: env.SELF_HOSTED_IMAGE_MODEL,
+      ...(env.SELF_HOSTED_GEN_TOKEN ? { token: env.SELF_HOSTED_GEN_TOKEN } : {}),
+    });
+  }
   if (env.IMAGE_GEN_PROVIDER === "fake" || !env.IMAGE_GEN_API_KEY) {
     return new FakeCreativeProvider();
   }

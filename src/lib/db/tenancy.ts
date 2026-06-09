@@ -27,6 +27,8 @@ export const TENANT_SCOPED_MODELS = {
   Asset: "via-item",
   PublishJob: "via-item",
   AnalyticsSnapshot: "via-job",
+  ReviewShare: "via-client",
+  ReviewComment: "via-item",
 } as const;
 
 export type TenantScopedModel = keyof typeof TENANT_SCOPED_MODELS;

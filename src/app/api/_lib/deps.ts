@@ -1,7 +1,8 @@
 // Request-scoped wiring: build services/repositories from the real Prisma client
 // and validated env. Kept out of the route files so handlers stay thin.
+import { randomBytes } from "node:crypto";
 import { getPrisma } from "@/lib/db/prisma";
-import { requireEnv } from "@/lib/config/env";
+import { getEnv, requireEnv } from "@/lib/config/env";
 import { AuthService } from "@/lib/auth/auth-service";
 import { TeamService } from "@/lib/team";
 import { requireAuth, type AuthContext } from "@/lib/auth/guard";
@@ -16,10 +17,12 @@ import {
   prismaClientStore,
   prismaConnectedAccountRepository,
   prismaPerformanceStore,
+  prismaReviewStore,
   prismaSchedulerStore,
   prismaTeamStore,
 } from "@/lib/repositories/prisma-stores";
 import { PerformanceService } from "@/lib/performance";
+import { ReviewService } from "@/lib/review";
 import { SchedulerService } from "@/lib/scheduler";
 import { enqueuePublish } from "@/lib/queue/publish-queue";
 import { ApprovalService } from "@/lib/approval";
@@ -87,6 +90,15 @@ export function analyticsService(): AnalyticsService {
 
 export function performanceService(): PerformanceService {
   return new PerformanceService({ store: prismaPerformanceStore(getPrisma()) });
+}
+
+export function reviewService(): ReviewService {
+  return new ReviewService({
+    store: prismaReviewStore(getPrisma()),
+    branding: prismaBrandingStore(getPrisma()),
+    generateToken: () => randomBytes(24).toString("hex"),
+    baseUrl: getEnv().APP_BASE_URL,
+  });
 }
 
 export function schedulerService(): SchedulerService {

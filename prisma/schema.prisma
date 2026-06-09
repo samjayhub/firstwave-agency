@@ -104,6 +104,7 @@ model Client {
   competitors     Competitor[]
   trends          Trend[]
   plans           ContentPlan[]
+  reviewShares    ReviewShare[]
   createdAt       DateTime           @default(now())
 
   @@index([agencyId])
@@ -204,6 +205,7 @@ model ContentItem {
   assets      Asset[]
   targets     ConnectedAccount[]
   publishJobs PublishJob[]
+  reviewComments ReviewComment[]
   createdAt   DateTime           @default(now())
 
   @@index([planId])
@@ -268,6 +270,32 @@ model AnalyticsSnapshot {
   publishJob   PublishJob @relation(fields: [publishJobId], references: [id])
   metrics      Json // impressions, likes, comments, shares, watchTime
   capturedAt   DateTime   @default(now())
+}
+
+// ── Reviewer portal (P4-04) ────────────────────────────────
+// A shareable link an agency hands a client to review their queue. The token is
+// the unguessable secret; revoked links resolve to nothing.
+model ReviewShare {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  token     String   @unique
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
+
+// A reviewer's note on a content item (threaded by createdAt).
+model ReviewComment {
+  id            String      @id @default(cuid())
+  contentItemId String
+  contentItem   ContentItem @relation(fields: [contentItemId], references: [id])
+  body          String
+  author        String
+  createdAt     DateTime    @default(now())
+
+  @@index([contentItemId])
 }
 
 // ── AI audit trail ─────────────────────────────────────────

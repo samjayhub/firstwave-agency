@@ -32,6 +32,7 @@ import type { BrandingStore } from "@/lib/whitelabel/types";
 import type { DesignItemStore, DesignSpec } from "@/lib/design/types";
 import type { SchedulerStore } from "@/lib/scheduler/types";
 import type { PerformanceStore } from "@/lib/performance/types";
+import type { ReviewStore } from "@/lib/review/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -402,6 +403,114 @@ export function prismaSchedulerStore(prisma: PrismaClient): SchedulerStore {
         data: { status: "scheduled" },
       });
       return res.count > 0;
+    },
+  };
+}
+
+export function prismaReviewStore(prisma: PrismaClient): ReviewStore {
+  return {
+    createShare: async (agencyId, clientId, token) => {
+      // Only mint for a client the agency owns.
+      const owned = await prisma.client.findFirst({
+        where: { id: clientId, agencyId },
+        select: { id: true },
+      });
+      if (!owned) return null;
+      const row = await prisma.reviewShare.create({
+        data: { clientId, token },
+        select: { id: true, clientId: true, token: true, revoked: true, createdAt: true },
+      });
+      return row;
+    },
+    listShares: (agencyId, clientId) =>
+      prisma.reviewShare.findMany({
+        where: { clientId, client: { agencyId } },
+        select: { id: true, clientId: true, token: true, revoked: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
+    revokeShare: async (agencyId, shareId) => {
+      const res = await prisma.reviewShare.updateMany({
+        where: { id: shareId, revoked: false, client: { agencyId } },
+        data: { revoked: true },
+      });
+      return res.count > 0;
+    },
+    resolveShare: async (token) => {
+      const row = await prisma.reviewShare.findFirst({
+        where: { token, revoked: false },
+        select: { clientId: true, client: { select: { agencyId: true, name: true } } },
+      });
+      if (!row) return null;
+      return {
+        clientId: row.clientId,
+        agencyId: row.client.agencyId,
+        clientName: row.client.name,
+      };
+    },
+    queueForClient: async (clientId) => {
+      const rows = await prisma.contentItem.findMany({
+        where: { status: "in_review", plan: { clientId } },
+        select: {
+          id: true,
+          status: true,
+          scheduledAt: true,
+          copy: true,
+          reviewComments: {
+            orderBy: { createdAt: "asc" },
+            select: { id: true, body: true, author: true, createdAt: true },
+          },
+        },
+        orderBy: { scheduledAt: "asc" },
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        status: r.status as ItemStatus,
+        scheduledAt: r.scheduledAt,
+        copy: r.copy,
+        comments: r.reviewComments,
+      }));
+    },
+    getItem: async (clientId, itemId) => {
+      const r = await prisma.contentItem.findFirst({
+        where: { id: itemId, plan: { clientId } },
+        select: {
+          id: true,
+          status: true,
+          scheduledAt: true,
+          copy: true,
+          reviewComments: {
+            orderBy: { createdAt: "asc" },
+            select: { id: true, body: true, author: true, createdAt: true },
+          },
+        },
+      });
+      if (!r) return null;
+      return {
+        id: r.id,
+        status: r.status as ItemStatus,
+        scheduledAt: r.scheduledAt,
+        copy: r.copy,
+        comments: r.reviewComments,
+      };
+    },
+    transition: async (clientId, itemId, from, to) => {
+      const res = await prisma.contentItem.updateMany({
+        where: { id: itemId, status: from, plan: { clientId } },
+        data: { status: to },
+      });
+      return res.count > 0;
+    },
+    addComment: async (clientId, itemId, body, author) => {
+      // Confirm the item belongs to this client before attaching a comment.
+      const item = await prisma.contentItem.findFirst({
+        where: { id: itemId, plan: { clientId } },
+        select: { id: true },
+      });
+      if (!item) return null;
+      return prisma.reviewComment.create({
+        data: { contentItemId: itemId, body, author },
+        select: { id: true, body: true, author: true, createdAt: true },
+      });
     },
   };
 }

@@ -67,6 +67,13 @@ export const envSchema = z.object({
 
   // Generated-media storage. Local dir for MVP; swap to S3/R2 later.
   ASSET_STORAGE_DIR: z.string().default("./.assets"),
+
+  // Billing — Stripe subscriptions for agencies (P3-05). Optional until billing
+  // is switched on; required at the point each billing route runs.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_STARTER: z.string().optional(),
+  STRIPE_PRICE_PRO: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

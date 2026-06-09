@@ -116,6 +116,60 @@ describe("ContentPlannerService.generate", () => {
     expect(day2?.scheduledAt?.toISOString()).toBe("2026-06-09T00:00:00.000Z");
   });
 
+  it("injects a performance brief into the prompt when the learning loop is wired", async () => {
+    const clients = new ClientRepository(new FakeClientStore());
+    const client = await clients.create({ agencyId: "ag1" }, { name: "Acme" });
+    const brandProfiles = new FakeBrandProfileStore();
+    await brandProfiles.upsert(client.id, { palette: [], fonts: [], voice: VOICE });
+    const llm = FakeLlmProvider.constant(PLAN_JSON);
+    const svc = new ContentPlannerService({
+      llm,
+      sink: new InMemoryAuditSink(),
+      model: "m",
+      clients,
+      brandProfiles,
+      plans: new FakeContentPlanStore(),
+      performance: {
+        briefForClient: async () => ({
+          topPillars: ["story"],
+          topFormats: ["image"],
+          highlights: [{ idea: "winner", platform: "linkedin", score: 99 }],
+          sampleSize: 7,
+        }),
+      },
+    });
+
+    await svc.generate({ agencyId: "ag1" }, { clientId: client.id });
+
+    const call = llm.calls[0]!;
+    expect(call.messages[0]!.content).toContain("Past performance");
+    expect(call.messages[0]!.content).toContain("winner");
+    expect(call.opts?.system).toContain("PAST PERFORMANCE");
+  });
+
+  it("omits the performance section when the provider returns null", async () => {
+    const clients = new ClientRepository(new FakeClientStore());
+    const client = await clients.create({ agencyId: "ag1" }, { name: "Acme" });
+    const brandProfiles = new FakeBrandProfileStore();
+    await brandProfiles.upsert(client.id, { palette: [], fonts: [], voice: VOICE });
+    const llm = FakeLlmProvider.constant(PLAN_JSON);
+    const svc = new ContentPlannerService({
+      llm,
+      sink: new InMemoryAuditSink(),
+      model: "m",
+      clients,
+      brandProfiles,
+      plans: new FakeContentPlanStore(),
+      performance: { briefForClient: async () => null }, // nothing measured yet
+    });
+
+    await svc.generate({ agencyId: "ag1" }, { clientId: client.id });
+
+    const call = llm.calls[0]!;
+    expect(call.messages[0]!.content).not.toContain("Past performance");
+    expect(call.opts?.system).not.toContain("PAST PERFORMANCE");
+  });
+
   it("planner output round-trips cleanly through the copy engine", async () => {
     const { svc, client, plans } = await setup();
     await svc.generate({ agencyId: "ag1" }, { clientId: client.id });

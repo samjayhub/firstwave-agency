@@ -11,6 +11,7 @@ import { ClientRepository } from "@/lib/repositories/client-repository";
 import type { BrandProfileStore } from "@/lib/brand-intel";
 import type { Platform } from "@/lib/publishers/types";
 import { PLAN_PLATFORMS, type PlanItemBrief, type StoredCopy } from "@/lib/content/types";
+import type { PerformanceProvider } from "@/lib/performance/types";
 
 export interface PlanInput {
   clientId: string;
@@ -51,6 +52,8 @@ export interface ContentPlannerDeps {
   clients: ClientRepository;
   brandProfiles: BrandProfileStore;
   plans: ContentPlanStore;
+  /** Optional learning loop (P4-02): grounds the plan in past performance. */
+  performance?: PerformanceProvider;
   clock?: () => Date;
 }
 
@@ -102,11 +105,18 @@ export function parsePlan(
   return items;
 }
 
-function systemPrompt(days: number, platforms: Platform[]): string {
+function systemPrompt(days: number, platforms: Platform[], hasPerformance: boolean): string {
   return [
     `You are a social media strategist creating a ${days}-day content plan.`,
     `Plan only for these platforms: ${platforms.join(", ")}.`,
     "Ground every idea in the brand voice provided by the user.",
+    ...(hasPerformance
+      ? [
+          "The user also provides this client's PAST PERFORMANCE. Lean into the",
+          "pillars and formats that performed best and build on the strongest",
+          "ideas; do not simply repeat them verbatim. Avoid angles that did not land.",
+        ]
+      : []),
     "Respond with ONLY a JSON array, no prose, no code fences. Each element:",
     '{"day":<1-' + days + '>,"platform":"<one of the platforms>","pillar":"<theme>","format":"<text|image|carousel|short-video>","idea":"<one-line idea>"}',
     "Spread posts sensibly across the days and platforms.",
@@ -136,19 +146,30 @@ export class ContentPlannerService {
       throw new ValidationError("No supported platforms requested");
     }
 
+    // Learning loop (P4-02): ground the plan in what performed, when available.
+    const performance = this.deps.performance
+      ? await this.deps.performance.briefForClient(ctx.agencyId, input.clientId)
+      : null;
+
     const meta: AiAuditMeta = {
       agencyId: ctx.agencyId,
       clientId: input.clientId,
       action: "content_plan",
       provider: "anthropic",
       model: this.deps.model,
-      inputSummary: `${days}-day plan for ${safePlatforms.join(", ")}`,
+      inputSummary:
+        `${days}-day plan for ${safePlatforms.join(", ")}` +
+        (performance ? ` (learning from ${performance.sampleSize} past posts)` : ""),
     };
+
+    const userContent =
+      `Brand voice:\n${JSON.stringify(profile.voice)}` +
+      (performance ? `\n\nPast performance (favor what worked):\n${JSON.stringify(performance)}` : "");
 
     const briefs = await withAudit(this.deps.sink, meta, async () => {
       const raw = await this.deps.llm.complete(
-        [{ role: "user", content: `Brand voice:\n${JSON.stringify(profile.voice)}` }],
-        { system: systemPrompt(days, safePlatforms), maxTokens: 4096 },
+        [{ role: "user", content: userContent }],
+        { system: systemPrompt(days, safePlatforms, performance !== null), maxTokens: 4096 },
       );
       const parsed = parsePlan(raw, days, safePlatforms);
       return { result: parsed, outputSummary: `${parsed.length} plan items` };

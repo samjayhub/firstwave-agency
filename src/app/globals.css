@@ -1,0 +1,206 @@
+/* Operator dashboard styling (P4-03). Deliberately framework-free: a small set
+   of design tokens + utility classes, no Tailwind/CSS-in-JS dependency. */
+:root {
+  --bg: #0b0d12;
+  --surface: #151922;
+  --surface-2: #1d2330;
+  --border: #2a3242;
+  --text: #e6e9ef;
+  --text-dim: #9aa4b6;
+  --primary: #4f46e5;
+  --primary-hover: #6056e8;
+
+  --tone-neutral: #6b7280;
+  --tone-info: #3b82f6;
+  --tone-success: #22c55e;
+  --tone-warn: #f59e0b;
+  --tone-danger: #ef4444;
+
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.55;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.shell {
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.topbar .brand {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.page-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row .headline {
+  font-weight: 500;
+}
+
+.stat-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  color: #fff;
+}
+
+.badge.neutral { background: var(--tone-neutral); }
+.badge.info { background: var(--tone-info); }
+.badge.success { background: var(--tone-success); }
+.badge.warn { background: var(--tone-warn); color: #1a1205; }
+.badge.danger { background: var(--tone-danger); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover { border-color: var(--primary); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+.btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.btn.primary:hover { background: var(--primary-hover); }
+
+.btn-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  font-size: 0.8rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+}
+
+.field {
+  display: block;
+  margin-bottom: 0.9rem;
+}
+
+.field label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 0.3rem;
+}
+
+.field input {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.form-error {
+  color: var(--tone-danger);
+  font-size: 0.85rem;
+  margin-bottom: 0.8rem;
+}
+
+.auth-wrap {
+  max-width: 380px;
+  margin: 8vh auto;
+  padding: 0 1.5rem;
+}

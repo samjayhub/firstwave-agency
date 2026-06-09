@@ -199,6 +199,7 @@ model ContentItem {
   plan        ContentPlan        @relation(fields: [planId], references: [id])
   scheduledAt DateTime?
   copy        Json? // caption, hook, hashtags, description
+  designSpec  Json? // specialist-agents design brief (P3-08): concept/copy/colors/imagery
   status      ItemStatus         @default(draft)
   assets      Asset[]
   targets     ConnectedAccount[]

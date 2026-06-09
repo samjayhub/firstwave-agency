@@ -29,6 +29,7 @@ import type { TrendBrief, TrendStore } from "@/lib/trend/types";
 import type { AnalyticsStore, PostMetrics } from "@/lib/analytics/types";
 import type { BillingStore } from "@/lib/billing/types";
 import type { BrandingStore } from "@/lib/whitelabel/types";
+import type { DesignItemStore, DesignSpec } from "@/lib/design/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -154,6 +155,26 @@ export function prismaContentItemStore(prisma: PrismaClient): ContentItemStore {
       const res = await prisma.contentItem.updateMany({
         where: { id: itemId, plan: { client: { agencyId } } },
         data: { copy: copy as unknown as Prisma.InputJsonValue },
+      });
+      return res.count > 0;
+    },
+  };
+}
+
+export function prismaDesignItemStore(prisma: PrismaClient): DesignItemStore {
+  return {
+    findForAgency: async (agencyId, itemId) => {
+      const row = await prisma.contentItem.findFirst({
+        where: { id: itemId, plan: { client: { agencyId } } },
+        select: { id: true, copy: true, plan: { select: { clientId: true } } },
+      });
+      if (!row) return null;
+      return { id: row.id, clientId: row.plan.clientId, copy: row.copy };
+    },
+    saveSpec: async (agencyId, itemId, spec: DesignSpec) => {
+      const res = await prisma.contentItem.updateMany({
+        where: { id: itemId, plan: { client: { agencyId } } },
+        data: { designSpec: spec as unknown as Prisma.InputJsonValue },
       });
       return res.count > 0;
     },

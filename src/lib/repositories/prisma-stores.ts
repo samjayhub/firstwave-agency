@@ -30,6 +30,7 @@ import type { AnalyticsStore, PostMetrics } from "@/lib/analytics/types";
 import type { BillingStore } from "@/lib/billing/types";
 import type { BrandingStore } from "@/lib/whitelabel/types";
 import type { DesignItemStore, DesignSpec } from "@/lib/design/types";
+import type { SchedulerStore } from "@/lib/scheduler/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -361,6 +362,45 @@ export function prismaPublishJobStore(prisma: PrismaClient): PublishJobStore {
           error: result.error ?? null,
         },
       });
+    },
+  };
+}
+
+export function prismaSchedulerStore(prisma: PrismaClient): SchedulerStore {
+  return {
+    findDueItems: async (now, limit, agencyId) => {
+      const rows = await prisma.contentItem.findMany({
+        where: {
+          status: "approved",
+          scheduledAt: { not: null, lte: now },
+          targets: { some: {} },
+          ...(agencyId ? { plan: { client: { agencyId } } } : {}),
+        },
+        select: {
+          id: true,
+          plan: { select: { client: { select: { agencyId: true } } } },
+          // First target account decides where this item publishes (one item →
+          // one publish lifecycle, mirroring the manual publish route).
+          targets: { select: { id: true, platform: true }, take: 1 },
+        },
+        orderBy: { scheduledAt: "asc" },
+        take: limit,
+      });
+      return rows
+        .filter((r) => r.targets.length > 0)
+        .map((r) => ({
+          agencyId: r.plan.client.agencyId,
+          itemId: r.id,
+          connectedAccountId: r.targets[0]!.id,
+          platform: r.targets[0]!.platform,
+        }));
+    },
+    markScheduled: async (agencyId, itemId) => {
+      const res = await prisma.contentItem.updateMany({
+        where: { id: itemId, status: "approved", plan: { client: { agencyId } } },
+        data: { status: "scheduled" },
+      });
+      return res.count > 0;
     },
   };
 }

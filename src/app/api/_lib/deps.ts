@@ -15,8 +15,11 @@ import {
   prismaBrandingStore,
   prismaClientStore,
   prismaConnectedAccountRepository,
+  prismaSchedulerStore,
   prismaTeamStore,
 } from "@/lib/repositories/prisma-stores";
+import { SchedulerService } from "@/lib/scheduler";
+import { enqueuePublish } from "@/lib/queue/publish-queue";
 import { ApprovalService } from "@/lib/approval";
 import { ConnectionService } from "@/lib/connections";
 import { AnalyticsService } from "@/lib/analytics";
@@ -77,6 +80,13 @@ export function analyticsService(): AnalyticsService {
   return new AnalyticsService({
     store: prismaAnalyticsStore(getPrisma()),
     resolvePublisher: getPublisher,
+  });
+}
+
+export function schedulerService(): SchedulerService {
+  return new SchedulerService({
+    store: prismaSchedulerStore(getPrisma()),
+    enqueue: enqueuePublish,
   });
 }
 

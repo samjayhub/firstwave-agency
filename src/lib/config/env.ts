@@ -13,6 +13,9 @@ export const envSchema = z.object({
   // Data + queue (needed from PR2/PR7 onward).
   DATABASE_URL: z.string().optional(),
   REDIS_URL: z.string().optional(),
+  // Scheduling engine heartbeat (P4-01): how often the worker scans for content
+  // items whose scheduledAt has arrived and auto-enqueues their publish jobs.
+  SCHEDULER_TICK_MS: z.coerce.number().int().positive().default(60_000),
 
   // Auth (PR3).
   JWT_SECRET: z.string().min(16).optional(),

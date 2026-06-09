@@ -27,6 +27,7 @@ import type { ResearchBrief, ResearchBriefStore } from "@/lib/research/types";
 import type { CompetitorBrief, CompetitorStore } from "@/lib/competitor/types";
 import type { TrendBrief, TrendStore } from "@/lib/trend/types";
 import type { AnalyticsStore, PostMetrics } from "@/lib/analytics/types";
+import type { BillingStore } from "@/lib/billing/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -557,6 +558,36 @@ export function prismaTeamStore(prisma: PrismaClient): TeamStore {
       const res = await prisma.user.deleteMany({ where: { id: userId, agencyId } });
       return res.count > 0;
     },
+  };
+}
+
+const SUBSCRIPTION_SELECT = {
+  agencyId: true,
+  plan: true,
+  status: true,
+  stripeCustomerId: true,
+  stripeSubscriptionId: true,
+  currentPeriodEnd: true,
+} as const;
+
+export function prismaBillingStore(prisma: PrismaClient): BillingStore {
+  return {
+    getByAgency: (agencyId) =>
+      prisma.subscription.findUnique({ where: { agencyId }, select: SUBSCRIPTION_SELECT }),
+    getByCustomerId: (customerId) =>
+      prisma.subscription.findUnique({
+        where: { stripeCustomerId: customerId },
+        select: SUBSCRIPTION_SELECT,
+      }),
+    // The agency owns at most one subscription (unique agencyId), so upsert is the
+    // natural create-or-update; the patch only touches the fields it carries.
+    upsertByAgency: (agencyId, patch) =>
+      prisma.subscription.upsert({
+        where: { agencyId },
+        create: { agencyId, ...patch },
+        update: patch,
+        select: SUBSCRIPTION_SELECT,
+      }),
   };
 }
 

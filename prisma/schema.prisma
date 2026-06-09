@@ -14,12 +14,43 @@ datasource db {
 
 // ── Tenancy ────────────────────────────────────────────────
 model Agency {
-  id           String       @id @default(cuid())
+  id           String        @id @default(cuid())
   name         String
   users        User[]
   clients      Client[]
   aiAuditLogs  AiAuditLog[]
-  createdAt    DateTime     @default(now())
+  subscription Subscription?
+  createdAt    DateTime      @default(now())
+}
+
+// ── Billing (P3-05) ────────────────────────────────────────
+// One subscription per agency, mirroring the Stripe subscription it tracks.
+// Absent row == implicit free plan. Stripe ids are the join back to webhooks.
+model Subscription {
+  id                   String             @id @default(cuid())
+  agencyId             String             @unique
+  agency               Agency             @relation(fields: [agencyId], references: [id])
+  plan                 BillingPlan        @default(free)
+  status               SubscriptionStatus @default(active)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+}
+
+enum BillingPlan {
+  free
+  starter
+  pro
+}
+
+enum SubscriptionStatus {
+  active
+  trialing
+  past_due
+  canceled
+  incomplete
 }
 
 model User {

@@ -11,6 +11,7 @@ import {
   prismaAnalyticsStore,
   prismaApprovalStore,
   prismaAuthStore,
+  prismaBillingStore,
   prismaClientStore,
   prismaConnectedAccountRepository,
   prismaTeamStore,
@@ -18,6 +19,8 @@ import {
 import { ApprovalService } from "@/lib/approval";
 import { ConnectionService } from "@/lib/connections";
 import { AnalyticsService } from "@/lib/analytics";
+import { BillingService } from "@/lib/billing";
+import { HttpStripeGateway } from "@/lib/billing/stripe-gateway";
 import { getPublisher } from "@/lib/publishers";
 
 export function authService(): AuthService {
@@ -48,6 +51,20 @@ export function connectionService(): ConnectionService {
 
 export function connectedAccountsRepository() {
   return prismaConnectedAccountRepository(getPrisma());
+}
+
+export function billingService(): BillingService {
+  return new BillingService({
+    store: prismaBillingStore(getPrisma()),
+    gateway: new HttpStripeGateway({
+      secretKey: requireEnv("STRIPE_SECRET_KEY"),
+      webhookSecret: requireEnv("STRIPE_WEBHOOK_SECRET"),
+    }),
+    prices: {
+      starter: requireEnv("STRIPE_PRICE_STARTER"),
+      pro: requireEnv("STRIPE_PRICE_PRO"),
+    },
+  });
 }
 
 export function analyticsService(): AnalyticsService {

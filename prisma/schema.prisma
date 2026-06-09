@@ -21,6 +21,8 @@ model Agency {
   aiAuditLogs  AiAuditLog[]
   subscription Subscription?
   branding     AgencyBranding?
+  notifications Notification[]
+  notificationSetting NotificationSetting?
   createdAt    DateTime        @default(now())
 }
 
@@ -296,6 +298,37 @@ model ReviewComment {
   createdAt     DateTime    @default(now())
 
   @@index([contentItemId])
+}
+
+// ── Notifications & alerts (P4-06) ─────────────────────────
+// In-app notification feed (system of record) + per-agency delivery settings.
+model Notification {
+  id        String           @id @default(cuid())
+  agencyId  String
+  agency    Agency           @relation(fields: [agencyId], references: [id])
+  kind      NotificationKind
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([agencyId, createdAt])
+}
+
+model NotificationSetting {
+  id              String             @id @default(cuid())
+  agencyId        String             @unique
+  agency          Agency             @relation(fields: [agencyId], references: [id])
+  slackWebhookUrl String?
+  emailTo         String?
+  mutedKinds      NotificationKind[]
+  updatedAt       DateTime           @updatedAt
+}
+
+enum NotificationKind {
+  approval_requested
+  publish_failed
+  metric_milestone
 }
 
 // ── AI audit trail ─────────────────────────────────────────

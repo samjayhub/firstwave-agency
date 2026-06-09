@@ -51,6 +51,10 @@ import { youtubeTrendingSource } from "@/lib/trend/youtube-trending";
 import { tiktokCreativeCenterSource } from "@/lib/trend/tiktok-creative-center";
 import { combineSources } from "@/lib/trend/combine";
 import { getEnv } from "@/lib/config/env";
+import { NotificationService } from "@/lib/notifications";
+import { slackNotifier, httpEmailNotifier } from "@/lib/notifications/channels";
+import type { Notifier } from "@/lib/notifications/types";
+import { prismaNotificationStore } from "@/lib/repositories/prisma-stores";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import { PrismaAuditSink } from "@/lib/db/audit-sink";
 import { getLlmProvider, DEFAULT_LLM_MODEL } from "@/lib/llm";
@@ -58,6 +62,33 @@ import { requireEnv } from "@/lib/config/env";
 import { assertPublicUrl } from "@/lib/brand-intel/url-guard";
 
 export { QUEUE_NAMES } from "./names";
+
+function buildNotificationService(): NotificationService {
+  const env = getEnv();
+  const channels: Notifier[] = [slackNotifier()];
+  if (env.NOTIFY_EMAIL_ENDPOINT) {
+    channels.push(
+      httpEmailNotifier({
+        endpoint: env.NOTIFY_EMAIL_ENDPOINT,
+        ...(env.NOTIFY_EMAIL_TOKEN ? { token: env.NOTIFY_EMAIL_TOKEN } : {}),
+      }),
+    );
+  }
+  return new NotificationService({ store: prismaNotificationStore(getPrisma()), notifiers: channels });
+}
+
+const notifications = buildNotificationService();
+
+/** Best-effort alert — a notification failure must never crash a worker job. */
+async function safeNotify(event: Parameters<NotificationService["emit"]>[0]): Promise<void> {
+  try {
+    await notifications.emit(event);
+  } catch (err) {
+    logger.error("notification emit failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 function startPublishWorker(): Worker<PublishJobData> {
   const prisma = getPrisma();
@@ -84,9 +115,18 @@ function startPublishWorker(): Worker<PublishJobData> {
     { connection: redisConnection() },
   );
   worker.on("completed", (job) => logger.info("publish job completed", { jobId: job.id }));
-  worker.on("failed", (job, err) =>
-    logger.error("publish job failed", { jobId: job?.id, message: err.message }),
-  );
+  worker.on("failed", async (job, err) => {
+    logger.error("publish job failed", { jobId: job?.id, message: err.message });
+    // Dead-letter alert: only on the FINAL attempt (retries exhausted) (P4-06).
+    if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+      await safeNotify({
+        agencyId: job.data.agencyId,
+        kind: "publish_failed",
+        title: "Publishing failed",
+        body: `A post for item ${job.data.itemId} failed after all retries: ${err.message}`,
+      });
+    }
+  });
   return worker;
 }
 
@@ -221,7 +261,19 @@ function startMetricsWorker(): Worker<FetchMetricsJobData> {
     QUEUE_NAMES.fetchMetrics,
     async (job) => {
       try {
-        return await runFetchMetricsJob({ analytics }, job.data);
+        const snapshot = await runFetchMetricsJob({ analytics }, job.data);
+        // Milestone alert: impressions crossed the configured threshold (P4-06).
+        const impressions = snapshot.metrics.impressions ?? 0;
+        const threshold = getEnv().NOTIFY_MILESTONE_IMPRESSIONS;
+        if (impressions >= threshold) {
+          await safeNotify({
+            agencyId: job.data.agencyId,
+            kind: "metric_milestone",
+            title: "Performance milestone",
+            body: `A post passed ${threshold.toLocaleString()} impressions (now ${impressions.toLocaleString()}).`,
+          });
+        }
+        return snapshot;
       } catch (err) {
         // Terminal (not-found/validation) errors must not consume retries.
         if (err instanceof AppError && !isRetryable(err)) {

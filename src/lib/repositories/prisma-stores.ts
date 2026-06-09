@@ -33,6 +33,7 @@ import type { DesignItemStore, DesignSpec } from "@/lib/design/types";
 import type { SchedulerStore } from "@/lib/scheduler/types";
 import type { PerformanceStore } from "@/lib/performance/types";
 import type { ReviewStore } from "@/lib/review/types";
+import type { NotificationKind, NotificationStore } from "@/lib/notifications/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -403,6 +404,63 @@ export function prismaSchedulerStore(prisma: PrismaClient): SchedulerStore {
         data: { status: "scheduled" },
       });
       return res.count > 0;
+    },
+  };
+}
+
+export function prismaNotificationStore(prisma: PrismaClient): NotificationStore {
+  return {
+    save: (event) =>
+      prisma.notification.create({
+        data: {
+          agencyId: event.agencyId,
+          kind: event.kind,
+          title: event.title,
+          body: event.body,
+        },
+        select: { id: true, kind: true, title: true, body: true, readAt: true, createdAt: true },
+      }).then((r) => ({ ...r, kind: r.kind as NotificationKind })),
+    list: async (agencyId, limit) => {
+      const rows = await prisma.notification.findMany({
+        where: { agencyId },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+        select: { id: true, kind: true, title: true, body: true, readAt: true, createdAt: true },
+      });
+      return rows.map((r) => ({ ...r, kind: r.kind as NotificationKind }));
+    },
+    markRead: async (agencyId, id) => {
+      const res = await prisma.notification.updateMany({
+        where: { id, agencyId, readAt: null },
+        data: { readAt: new Date() },
+      });
+      return res.count > 0;
+    },
+    getSettings: async (agencyId) => {
+      const row = await prisma.notificationSetting.findUnique({
+        where: { agencyId },
+        select: { agencyId: true, slackWebhookUrl: true, emailTo: true, mutedKinds: true },
+      });
+      if (!row) return null;
+      return { ...row, mutedKinds: row.mutedKinds as NotificationKind[] };
+    },
+    upsertSettings: async (agencyId, patch) => {
+      const row = await prisma.notificationSetting.upsert({
+        where: { agencyId },
+        create: {
+          agencyId,
+          slackWebhookUrl: patch.slackWebhookUrl ?? null,
+          emailTo: patch.emailTo ?? null,
+          mutedKinds: patch.mutedKinds ?? [],
+        },
+        update: {
+          ...(patch.slackWebhookUrl !== undefined ? { slackWebhookUrl: patch.slackWebhookUrl } : {}),
+          ...(patch.emailTo !== undefined ? { emailTo: patch.emailTo } : {}),
+          ...(patch.mutedKinds !== undefined ? { mutedKinds: patch.mutedKinds } : {}),
+        },
+        select: { agencyId: true, slackWebhookUrl: true, emailTo: true, mutedKinds: true },
+      });
+      return { ...row, mutedKinds: row.mutedKinds as NotificationKind[] };
     },
   };
 }

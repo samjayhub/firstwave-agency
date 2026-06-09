@@ -29,6 +29,8 @@ export const TENANT_SCOPED_MODELS = {
   AnalyticsSnapshot: "via-job",
   ReviewShare: "via-client",
   ReviewComment: "via-item",
+  Notification: "direct",
+  NotificationSetting: "direct",
 } as const;
 
 export type TenantScopedModel = keyof typeof TENANT_SCOPED_MODELS;

@@ -16,6 +16,7 @@ import {
   prismaBrandingStore,
   prismaClientStore,
   prismaConnectedAccountRepository,
+  prismaNotificationStore,
   prismaPerformanceStore,
   prismaReviewStore,
   prismaSchedulerStore,
@@ -23,6 +24,9 @@ import {
 } from "@/lib/repositories/prisma-stores";
 import { PerformanceService } from "@/lib/performance";
 import { ReviewService } from "@/lib/review";
+import { NotificationService } from "@/lib/notifications";
+import { slackNotifier, httpEmailNotifier } from "@/lib/notifications/channels";
+import type { Notifier } from "@/lib/notifications/types";
 import { SchedulerService } from "@/lib/scheduler";
 import { enqueuePublish } from "@/lib/queue/publish-queue";
 import { ApprovalService } from "@/lib/approval";
@@ -90,6 +94,28 @@ export function analyticsService(): AnalyticsService {
 
 export function performanceService(): PerformanceService {
   return new PerformanceService({ store: prismaPerformanceStore(getPrisma()) });
+}
+
+/** Build the external notifier channels available given current config. */
+function notificationChannels(): Notifier[] {
+  const env = getEnv();
+  const channels: Notifier[] = [slackNotifier()];
+  if (env.NOTIFY_EMAIL_ENDPOINT) {
+    channels.push(
+      httpEmailNotifier({
+        endpoint: env.NOTIFY_EMAIL_ENDPOINT,
+        ...(env.NOTIFY_EMAIL_TOKEN ? { token: env.NOTIFY_EMAIL_TOKEN } : {}),
+      }),
+    );
+  }
+  return channels;
+}
+
+export function notificationService(): NotificationService {
+  return new NotificationService({
+    store: prismaNotificationStore(getPrisma()),
+    notifiers: notificationChannels(),
+  });
 }
 
 export function reviewService(): ReviewService {

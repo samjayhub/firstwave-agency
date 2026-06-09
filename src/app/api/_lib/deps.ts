@@ -16,13 +16,19 @@ import {
   prismaBrandingStore,
   prismaClientStore,
   prismaConnectedAccountRepository,
+  prismaApiKeyStore,
+  prismaAssetRepository,
+  prismaContentPlanStore,
   prismaNotificationStore,
   prismaPerformanceStore,
   prismaReportStore,
   prismaReviewStore,
   prismaSchedulerStore,
   prismaTeamStore,
+  prismaWebhookStore,
 } from "@/lib/repositories/prisma-stores";
+import { ApiKeyService } from "@/lib/api-keys";
+import { WebhookService } from "@/lib/webhooks";
 import { PerformanceService } from "@/lib/performance";
 import { ReportService } from "@/lib/reporting";
 import { httpReportSender, logReportSender } from "@/lib/reporting/sender";
@@ -135,6 +141,22 @@ export function reportService(): ReportService {
     clients: new ClientRepository(prismaClientStore(getPrisma())),
     sendEmail,
   });
+}
+
+export function apiKeyService(): ApiKeyService {
+  return new ApiKeyService({ store: prismaApiKeyStore(getPrisma()) });
+}
+
+export function assetRepository() {
+  return prismaAssetRepository(getPrisma());
+}
+
+export function contentPlanStore() {
+  return prismaContentPlanStore(getPrisma());
+}
+
+export function webhookService(): WebhookService {
+  return new WebhookService({ store: prismaWebhookStore(getPrisma()) });
 }
 
 export function reviewService(): ReviewService {

@@ -23,6 +23,8 @@ model Agency {
   branding     AgencyBranding?
   notifications Notification[]
   notificationSetting NotificationSetting?
+  apiKeys      ApiKey[]
+  webhooks     Webhook[]
   createdAt    DateTime        @default(now())
 }
 
@@ -329,6 +331,37 @@ enum NotificationKind {
   approval_requested
   publish_failed
   metric_milestone
+}
+
+// ── Public API + webhooks (P4-08) ──────────────────────────
+// Per-agency bearer key for the public /api/v1 surface. Only the SHA-256 hash is
+// stored; the raw token is shown once at creation.
+model ApiKey {
+  id         String    @id @default(cuid())
+  agencyId   String
+  agency     Agency    @relation(fields: [agencyId], references: [id])
+  name       String
+  prefix     String
+  hashedKey  String    @unique
+  lastUsedAt DateTime?
+  revoked    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+
+  @@index([agencyId])
+}
+
+// Outbound webhook subscription. `secret` signs each delivery (HMAC-SHA256).
+model Webhook {
+  id        String   @id @default(cuid())
+  agencyId  String
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+  url       String
+  secret    String
+  events    String[]
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([agencyId])
 }
 
 // ── AI audit trail ─────────────────────────────────────────

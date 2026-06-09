@@ -35,6 +35,8 @@ import type { PerformanceStore } from "@/lib/performance/types";
 import type { ReviewStore } from "@/lib/review/types";
 import type { NotificationKind, NotificationStore } from "@/lib/notifications/types";
 import type { ReportStore } from "@/lib/reporting/types";
+import type { ApiKeyStore } from "@/lib/api-keys";
+import type { WebhookEvent, WebhookStore } from "@/lib/webhooks";
 
 const CLIENT_SELECT = {
   id: true,
@@ -405,6 +407,73 @@ export function prismaSchedulerStore(prisma: PrismaClient): SchedulerStore {
         data: { status: "scheduled" },
       });
       return res.count > 0;
+    },
+  };
+}
+
+export function prismaApiKeyStore(prisma: PrismaClient): ApiKeyStore {
+  const SELECT = {
+    id: true,
+    agencyId: true,
+    name: true,
+    prefix: true,
+    lastUsedAt: true,
+    revoked: true,
+    createdAt: true,
+  } as const;
+  return {
+    create: (agencyId, data) =>
+      prisma.apiKey.create({
+        data: { agencyId, name: data.name, prefix: data.prefix, hashedKey: data.hashedKey },
+        select: SELECT,
+      }),
+    findByHash: (hashedKey) =>
+      prisma.apiKey.findFirst({
+        where: { hashedKey, revoked: false },
+        select: { id: true, agencyId: true },
+      }),
+    touch: async (id) => {
+      await prisma.apiKey.update({ where: { id }, data: { lastUsedAt: new Date() } });
+    },
+    list: (agencyId) =>
+      prisma.apiKey.findMany({ where: { agencyId }, orderBy: { createdAt: "desc" }, select: SELECT }),
+    revoke: async (agencyId, id) => {
+      const res = await prisma.apiKey.updateMany({
+        where: { id, agencyId, revoked: false },
+        data: { revoked: true },
+      });
+      return res.count > 0;
+    },
+  };
+}
+
+export function prismaWebhookStore(prisma: PrismaClient): WebhookStore {
+  return {
+    create: (agencyId, data) =>
+      prisma.webhook
+        .create({
+          data: { agencyId, url: data.url, secret: data.secret, events: data.events },
+          select: { id: true, agencyId: true, url: true, events: true, active: true, createdAt: true },
+        })
+        .then((r) => ({ ...r, events: r.events as WebhookEvent[] })),
+    list: async (agencyId) => {
+      const rows = await prisma.webhook.findMany({
+        where: { agencyId },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, agencyId: true, url: true, events: true, active: true, createdAt: true },
+      });
+      return rows.map((r) => ({ ...r, events: r.events as WebhookEvent[] }));
+    },
+    remove: async (agencyId, id) => {
+      const res = await prisma.webhook.deleteMany({ where: { id, agencyId } });
+      return res.count > 0;
+    },
+    deliverablesFor: async (agencyId, event) => {
+      const rows = await prisma.webhook.findMany({
+        where: { agencyId, active: true, events: { has: event } },
+        select: { id: true, url: true, secret: true },
+      });
+      return rows;
     },
   };
 }

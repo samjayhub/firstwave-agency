@@ -43,4 +43,10 @@ export interface AssetStorage {
   put(key: string, bytes: Buffer, contentType: string): Promise<StoredObject>;
   /** Fetch a stored object's bytes (for the tenant-checked streamer). */
   get(key: string): Promise<StoredBytes | null>;
+  /**
+   * Delete a stored object by its public URL (media-library retention, P4-10).
+   * Best-effort: a no-op when the URL isn't one we own (e.g. an external upload)
+   * or the object is already gone.
+   */
+  deleteByUrl(url: string): Promise<void>;
 }

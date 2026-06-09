@@ -139,7 +139,43 @@ export class FakeMediaStore implements MediaStore {
     return true;
   }
 
-  async archiveStale(agencyId: string, clientId: string, before: Date): Promise<number> {
+  async findPurgeable(agencyId: string, clientId: string, before: Date) {
+    return this.assets
+      .filter(
+        (r) =>
+          r.agencyId === agencyId &&
+          r.clientId === clientId &&
+          r.archivedAt !== null &&
+          r.archivedAt < before,
+      )
+      .map((r) => ({ id: r.id, url: r.url }));
+  }
+
+  async deleteAssets(agencyId: string, ids: string[]): Promise<number> {
+    const set = new Set(ids);
+    let n = 0;
+    for (let i = this.assets.length - 1; i >= 0; i--) {
+      if (this.assets[i]!.agencyId === agencyId && set.has(this.assets[i]!.id)) {
+        this.assets.splice(i, 1);
+        n++;
+      }
+    }
+    return n;
+  }
+
+  async countByUrl(agencyId: string, url: string): Promise<number> {
+    return this.assets.filter((r) => r.agencyId === agencyId && r.url === url).length;
+  }
+
+  async sweepTargets(): Promise<Array<{ agencyId: string; clientId: string }>> {
+    const seen = new Map<string, { agencyId: string; clientId: string }>();
+    for (const r of this.assets) {
+      seen.set(`${r.agencyId}:${r.clientId}`, { agencyId: r.agencyId, clientId: r.clientId });
+    }
+    return [...seen.values()];
+  }
+
+  async archiveStale(agencyId: string, clientId: string, before: Date, at: Date): Promise<number> {
     const protectedItems = new Set(
       this.items.filter((i) => RETAINED_STATUSES.includes(i.status)).map((i) => i.itemId),
     );
@@ -155,7 +191,7 @@ export class FakeMediaStore implements MediaStore {
         r.createdAt < before &&
         !inUse
       ) {
-        r.archivedAt = before;
+        r.archivedAt = at;
         n++;
       }
     }

@@ -10,4 +10,5 @@ export const QUEUE_NAMES = {
   publish: "publish",
   fetchMetrics: "fetch-metrics",
   schedulerTick: "scheduler-tick",
+  reportDigest: "report-digest",
 } as const;

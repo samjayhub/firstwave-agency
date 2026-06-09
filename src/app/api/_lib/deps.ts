@@ -18,11 +18,14 @@ import {
   prismaConnectedAccountRepository,
   prismaNotificationStore,
   prismaPerformanceStore,
+  prismaReportStore,
   prismaReviewStore,
   prismaSchedulerStore,
   prismaTeamStore,
 } from "@/lib/repositories/prisma-stores";
 import { PerformanceService } from "@/lib/performance";
+import { ReportService } from "@/lib/reporting";
+import { httpReportSender, logReportSender } from "@/lib/reporting/sender";
 import { ReviewService } from "@/lib/review";
 import { NotificationService } from "@/lib/notifications";
 import { slackNotifier, httpEmailNotifier } from "@/lib/notifications/channels";
@@ -115,6 +118,22 @@ export function notificationService(): NotificationService {
   return new NotificationService({
     store: prismaNotificationStore(getPrisma()),
     notifiers: notificationChannels(),
+  });
+}
+
+export function reportService(): ReportService {
+  const env = getEnv();
+  const sendEmail = env.NOTIFY_EMAIL_ENDPOINT
+    ? httpReportSender({
+        endpoint: env.NOTIFY_EMAIL_ENDPOINT,
+        ...(env.NOTIFY_EMAIL_TOKEN ? { token: env.NOTIFY_EMAIL_TOKEN } : {}),
+      })
+    : logReportSender;
+  return new ReportService({
+    store: prismaReportStore(getPrisma()),
+    branding: prismaBrandingStore(getPrisma()),
+    clients: new ClientRepository(prismaClientStore(getPrisma())),
+    sendEmail,
   });
 }
 

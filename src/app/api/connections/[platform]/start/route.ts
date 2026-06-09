@@ -8,7 +8,15 @@ import type { Platform } from "@/lib/publishers/types";
 
 export const runtime = "nodejs";
 
-const SUPPORTED = new Set<Platform>(["linkedin"]); // MVP
+const SUPPORTED = new Set<Platform>(["linkedin", "meta_fb", "meta_ig"]);
+
+/** Per-platform OAuth redirect URI env var. */
+function redirectUriFor(platform: Platform): string {
+  if (platform === "meta_fb" || platform === "meta_ig") {
+    return requireEnv("META_REDIRECT_URI");
+  }
+  return requireEnv("LINKEDIN_REDIRECT_URI");
+}
 
 export async function GET(req: Request, { params }: { params: { platform: string } }) {
   try {
@@ -19,7 +27,7 @@ export async function GET(req: Request, { params }: { params: { platform: string
     const clientId = new URL(req.url).searchParams.get("clientId");
     if (!clientId) throw new ValidationError("clientId is required");
 
-    const redirectUri = requireEnv("LINKEDIN_REDIRECT_URI");
+    const redirectUri = redirectUriFor(platform);
     const nonce = randomUUID();
     // State carries the (clientId, platform) + a nonce echoed in an HttpOnly cookie
     // (double-submit) so the callback can verify it wasn't forged.

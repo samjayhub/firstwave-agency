@@ -7,6 +7,7 @@ import { MetaPublisher } from "./meta";
 import { YouTubePublisher } from "./youtube";
 import { TikTokPublisher } from "./tiktok";
 import { XPublisher } from "./x";
+import { PinterestPublisher } from "./pinterest";
 
 export function getPublisher(platform: Platform): Publisher {
   switch (platform) {
@@ -37,8 +38,12 @@ export function getPublisher(platform: Platform): Publisher {
         clientId: requireEnv("X_CLIENT_ID"),
         clientSecret: requireEnv("X_CLIENT_SECRET"),
       });
+    case "pinterest":
+      return new PinterestPublisher({
+        appId: requireEnv("PINTEREST_APP_ID"),
+        appSecret: requireEnv("PINTEREST_APP_SECRET"),
+      });
     default:
-      // pinterest = later Phase 3.
       throw new ValidationError(`No publisher adapter for platform "${platform}"`);
   }
 }

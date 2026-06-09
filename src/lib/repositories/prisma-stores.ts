@@ -24,6 +24,7 @@ import type { Platform } from "@/lib/publishers/types";
 import type { ResearchBrief, ResearchBriefStore } from "@/lib/research/types";
 import type { CompetitorBrief, CompetitorStore } from "@/lib/competitor/types";
 import type { TrendBrief, TrendStore } from "@/lib/trend/types";
+import type { AnalyticsStore, PostMetrics } from "@/lib/analytics/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -452,6 +453,68 @@ export function prismaTrendStore(prisma: PrismaClient): TrendStore {
       });
       if (!row || row.trendBrief == null) return null;
       return row.trendBrief as unknown as TrendBrief;
+    },
+  };
+}
+
+export function prismaAnalyticsStore(prisma: PrismaClient): AnalyticsStore {
+  return {
+    getPublishedPost: async (agencyId, publishJobId) => {
+      // Scope through item → plan → client → agency; only a live post is readable.
+      const job = await prisma.publishJob.findFirst({
+        where: {
+          id: publishJobId,
+          state: "published",
+          externalId: { not: null },
+          contentItem: { plan: { client: { agencyId } } },
+        },
+        select: {
+          id: true,
+          platform: true,
+          externalId: true,
+          contentItem: { select: { plan: { select: { clientId: true } } } },
+        },
+      });
+      if (!job?.externalId) return null;
+      // A connected account on the same client + platform supplies the read token.
+      const account = await prisma.connectedAccount.findFirst({
+        where: {
+          clientId: job.contentItem.plan.clientId,
+          platform: job.platform,
+          client: { agencyId },
+        },
+        select: { accessToken: true },
+      });
+      if (!account) return null;
+      return {
+        publishJobId: job.id,
+        platform: job.platform as Platform,
+        postExternalId: job.externalId,
+        accessTokenEnc: account.accessToken,
+      };
+    },
+    saveSnapshot: async (publishJobId, metrics: PostMetrics, capturedAt) => {
+      await prisma.analyticsSnapshot.create({
+        data: {
+          publishJobId,
+          metrics: metrics as unknown as Prisma.InputJsonValue,
+          capturedAt,
+        },
+      });
+    },
+    listSnapshots: async (agencyId, publishJobId) => {
+      const rows = await prisma.analyticsSnapshot.findMany({
+        where: {
+          publishJobId,
+          publishJob: { contentItem: { plan: { client: { agencyId } } } },
+        },
+        orderBy: { capturedAt: "desc" },
+        select: { metrics: true, capturedAt: true },
+      });
+      return rows.map((r) => ({
+        metrics: (r.metrics ?? {}) as unknown as PostMetrics,
+        capturedAt: r.capturedAt,
+      }));
     },
   };
 }

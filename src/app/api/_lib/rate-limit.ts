@@ -20,6 +20,9 @@ export const imageGenLimiter = new InMemoryRateLimiter(30, 60 * MIN);
 export const publishLimiter = new InMemoryRateLimiter(20, 60 * MIN);
 // Research triggers an LLM call per job — 6 per agency+client per hour.
 export const researchLimiter = new InMemoryRateLimiter(6, 60 * MIN);
+// Analytics refresh hits a platform API per published post — 30 per
+// agency+job per hour.
+export const analyticsLimiter = new InMemoryRateLimiter(30, 60 * MIN);
 // Competitor sweep fans out to the YouTube API + an LLM synthesis — 6 per
 // agency+client per hour.
 export const competitorLimiter = new InMemoryRateLimiter(6, 60 * MIN);

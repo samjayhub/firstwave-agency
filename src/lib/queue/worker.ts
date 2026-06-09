@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { AppError } from "@/lib/errors/app-error";
 import { getPrisma } from "@/lib/db/prisma";
 import {
+  prismaAnalyticsStore,
   prismaApprovalStore,
   prismaClientStore,
   prismaCompetitorStore,
@@ -21,8 +22,10 @@ import { isRetryable, runPublishJob, type PublishJobData } from "@/lib/publish/j
 import { runResearchJob, type ResearchJobData } from "./research-job";
 import { runCompetitorJob, type CompetitorJobData } from "./competitor-job";
 import { runTrendJob, type TrendJobData } from "./trend-job";
+import { runFetchMetricsJob, type FetchMetricsJobData } from "./fetch-metrics-job";
 import { ResearchService } from "@/lib/research";
 import { CompetitorService } from "@/lib/competitor";
+import { AnalyticsService } from "@/lib/analytics";
 import { youtubeCompetitorSource } from "@/lib/competitor/youtube";
 import { TrendService } from "@/lib/trend";
 import { googleTrendsSource } from "@/lib/trend/google-trends";
@@ -147,17 +150,50 @@ function startTrendWorker(): Worker<TrendJobData> {
   return worker;
 }
 
+function startMetricsWorker(): Worker<FetchMetricsJobData> {
+  const prisma = getPrisma();
+  const analytics = new AnalyticsService({
+    store: prismaAnalyticsStore(prisma),
+    resolvePublisher: getPublisher,
+  });
+
+  const worker = new Worker<FetchMetricsJobData>(
+    QUEUE_NAMES.fetchMetrics,
+    async (job) => {
+      try {
+        return await runFetchMetricsJob({ analytics }, job.data);
+      } catch (err) {
+        // Terminal (not-found/validation) errors must not consume retries.
+        if (err instanceof AppError && !isRetryable(err)) {
+          throw new UnrecoverableError(err.message);
+        }
+        throw err;
+      }
+    },
+    { connection: redisConnection() },
+  );
+  worker.on("completed", (job) =>
+    logger.info("fetch-metrics job completed", { jobId: job.id }),
+  );
+  worker.on("failed", (job, err) =>
+    logger.error("fetch-metrics job failed", { jobId: job?.id, message: err.message }),
+  );
+  return worker;
+}
+
 function main() {
   startPublishWorker();
   startResearchWorker();
   startCompetitorWorker();
   startTrendWorker();
+  startMetricsWorker();
   logger.info("worker started", {
     queues: [
       QUEUE_NAMES.publish,
       QUEUE_NAMES.researchSweep,
       QUEUE_NAMES.competitorSweep,
       QUEUE_NAMES.trendSweep,
+      QUEUE_NAMES.fetchMetrics,
     ],
   });
 }

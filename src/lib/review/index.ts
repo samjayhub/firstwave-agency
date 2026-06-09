@@ -8,6 +8,7 @@
 // status history + ReviewComment rows are the trail.
 import type { TenantContext } from "@/lib/db/tenancy";
 import { NotFoundError, ValidationError } from "@/lib/errors/app-error";
+import type { ComplianceGate } from "@/lib/compliance/types";
 import type { BrandingStore, PublicBranding } from "@/lib/whitelabel/types";
 import type {
   ResolvedShare,
@@ -34,6 +35,8 @@ export interface ReviewServiceDeps {
   generateToken: () => string;
   /** Base URL used to build the shareable link. */
   baseUrl: string;
+  /** Pre-approval compliance gate (P4-09); optional so the portal works without it. */
+  compliance?: ComplianceGate;
 }
 
 const MAX_COMMENT_LEN = 2000;
@@ -103,6 +106,11 @@ export class ReviewService {
     // request_changes requires a reason so the strategist knows what to fix.
     if (decision === "request_changes" && !trimmed) {
       throw new ValidationError("Please add a note explaining the requested changes");
+    }
+
+    // Compliance gate (P4-09): a reviewer can't approve a non-compliant item either.
+    if (decision === "approve") {
+      await this.deps.compliance?.assertApprovable(share.agencyId, itemId);
     }
 
     const to = decision === "approve" ? "approved" : "draft";

@@ -3,6 +3,7 @@
 // (where status = expected) so concurrent approvals can't double-apply.
 import type { TenantContext } from "@/lib/db/tenancy";
 import { ConflictError, NotFoundError } from "@/lib/errors/app-error";
+import type { ComplianceGate } from "@/lib/compliance/types";
 import { assertTransition, type ItemStatus } from "./state-machine";
 
 export * from "./state-machine";
@@ -32,12 +33,19 @@ export interface ApprovalStore {
 }
 
 export class ApprovalService {
-  constructor(private readonly store: ApprovalStore) {}
+  // `compliance` is the P4-09 pre-approval gate: an optional collaborator so the
+  // approval state machine stays usable (and testable) without it.
+  constructor(
+    private readonly store: ApprovalStore,
+    private readonly compliance?: ComplianceGate,
+  ) {}
 
   private async move(ctx: TenantContext, itemId: string, to: ItemStatus): Promise<ApprovalItem> {
     const item = await this.store.get(ctx.agencyId, itemId);
     if (!item) throw new NotFoundError("Content item not found");
     assertTransition(item.status, to); // pure rule check → ConflictError if illegal
+    // Compliance gate (P4-09): a non-compliant item is blocked before approval.
+    if (to === "approved") await this.compliance?.assertApprovable(ctx.agencyId, itemId);
     const ok = await this.store.transition(ctx.agencyId, itemId, item.status, to);
     if (!ok) {
       throw new ConflictError("Content item changed concurrently; please retry");

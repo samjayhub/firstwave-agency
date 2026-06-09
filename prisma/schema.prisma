@@ -23,6 +23,7 @@ model Agency {
   branding     AgencyBranding?
   notifications Notification[]
   notificationSetting NotificationSetting?
+  complianceSetting ComplianceSetting?
   apiKeys      ApiKey[]
   webhooks     Webhook[]
   createdAt    DateTime        @default(now())
@@ -331,6 +332,21 @@ enum NotificationKind {
   approval_requested
   publish_failed
   metric_milestone
+}
+
+// ── Content safety & compliance (P4-09) ────────────────────
+// Per-agency configuration for the pre-approval compliance gate. Absent row ==
+// platform defaults (enabled, no banned terms, disclosure optional). The gate's
+// platform-policy rules (caption/hashtag caps) are built-in and need no config.
+model ComplianceSetting {
+  id                String   @id @default(cuid())
+  agencyId          String   @unique
+  agency            Agency   @relation(fields: [agencyId], references: [id])
+  enabled           Boolean  @default(true)
+  bannedTerms       String[]
+  requireDisclosure Boolean  @default(false)
+  disclosureTags    String[]
+  updatedAt         DateTime @updatedAt
 }
 
 // ── Public API + webhooks (P4-08) ──────────────────────────

@@ -70,4 +70,34 @@ describe("CreativeStudioService.generateImage", () => {
       code: "VALIDATION",
     });
   });
+
+  it("dedupes byte-identical generations — reuses the stored object, no re-upload (P4-10)", async () => {
+    const items = new FakeContentItemStore();
+    const copy: StoredCopy = { platform: "linkedin", brief: { ...BRIEF } };
+    items.seed({ id: "item_1", agencyId: "ag1", clientId: "cl1", planId: "plan_1", copy });
+    items.seed({ id: "item_2", agencyId: "ag1", clientId: "cl1", planId: "plan_1", copy });
+    const brandProfiles = new FakeBrandProfileStore();
+    const provider = new FakeCreativeProvider();
+    const storage = new InMemoryAssetStorage();
+    const assets = new FakeAssetRepository();
+    let n = 0;
+    const svc = new CreativeStudioService({
+      provider,
+      storage,
+      assets,
+      items,
+      brandProfiles,
+      sink: new InMemoryAuditSink(),
+      idGen: () => `id${++n}`,
+    });
+
+    const a1 = await svc.generateImage({ agencyId: "ag1" }, "item_1");
+    const a2 = await svc.generateImage({ agencyId: "ag1" }, "item_2");
+
+    // Same bytes → the second reuses the first's stored object; only one written.
+    expect(a2.url).toBe(a1.url);
+    expect(storage.objects.size).toBe(1);
+    // The provider still ran both times (the hash is of its output).
+    expect(provider.calls).toHaveLength(2);
+  });
 });

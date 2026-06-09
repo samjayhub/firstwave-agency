@@ -23,12 +23,14 @@ import {
   prismaPerformanceStore,
   prismaReportStore,
   prismaComplianceStore,
+  prismaMediaStore,
   prismaReviewStore,
   prismaSchedulerStore,
   prismaTeamStore,
   prismaWebhookStore,
 } from "@/lib/repositories/prisma-stores";
 import { ComplianceService } from "@/lib/compliance";
+import { MediaLibraryService } from "@/lib/media";
 import { ApiKeyService } from "@/lib/api-keys";
 import { WebhookService } from "@/lib/webhooks";
 import { PerformanceService } from "@/lib/performance";
@@ -65,6 +67,10 @@ export function clientRepository(): ClientRepository {
 
 export function complianceService(): ComplianceService {
   return new ComplianceService({ store: prismaComplianceStore(getPrisma()) });
+}
+
+export function mediaLibraryService(): MediaLibraryService {
+  return new MediaLibraryService({ store: prismaMediaStore(getPrisma()) });
 }
 
 export function approvalService(): ApprovalService {

@@ -234,7 +234,17 @@ model Asset {
   url           String
   source        AssetSource
   meta          Json? // model, prompt, dimensions
+  // Media library (P4-10): sha256 of the bytes (dedupe key); version-group
+  // anchor + sequence (a reused asset is a new version in its source's group);
+  // soft-archive timestamp for retention (absent == live).
+  contentHash   String?
+  groupId       String?
+  version       Int          @default(1)
+  archivedAt    DateTime?
   createdAt     DateTime     @default(now())
+
+  @@index([groupId])
+  @@index([contentHash])
 }
 
 enum AssetKind {
@@ -247,6 +257,7 @@ enum AssetSource {
   generated
   lovart_manual
   upload
+  reused
 }
 
 // ── Publishing + analytics ─────────────────────────────────

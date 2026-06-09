@@ -1,7 +1,7 @@
 // Creative Studio service — generates a brand-styled image for a content item,
 // stores the bytes, and records an Asset row. The generation call is audited.
 // Everything external (provider, storage, repos) is injected for testability.
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { TenantContext } from "@/lib/db/tenancy";
 import { withAudit, type AiAuditSink, type AiAuditMeta } from "@/lib/audit";
 import { getEnv, requireEnv } from "@/lib/config/env";
@@ -33,12 +33,23 @@ export interface NewAsset {
   // "upload" is used by the public API asset-push endpoint (P4-08).
   source: "generated" | "upload";
   meta?: Record<string, unknown>;
+  // sha256 of the bytes — the media-library dedupe key (P4-10).
+  contentHash?: string;
 }
 
 export interface AssetRepository {
   /** Scoped create — verifies the content item belongs to the agency. */
   create(agencyId: string, input: NewAsset): Promise<AssetRecord>;
   listForItem(agencyId: string, itemId: string): Promise<AssetRecord[]>;
+  /**
+   * Find an existing asset for this client with the same content hash, so an
+   * identical generation reuses the stored object instead of re-uploading (P4-10).
+   */
+  findByHash(
+    agencyId: string,
+    clientId: string,
+    contentHash: string,
+  ): Promise<{ id: string; url: string } | null>;
 }
 
 // Formats that typically carry in-image text → route to a text-strong model.
@@ -97,15 +108,28 @@ export class CreativeStudioService {
       return { result: r, outputSummary: r.model, model: r.model };
     });
 
-    const key = `${item.clientId}/${itemId}/${this.idGen()}.png`;
-    const stored = await this.deps.storage.put(key, result.bytes, result.contentType);
+    // Dedupe (P4-10): if this client already has a byte-identical asset, reuse
+    // its stored object instead of writing the same bytes again.
+    const contentHash = createHash("sha256").update(result.bytes).digest("hex");
+    const existing = await this.deps.assets.findByHash(ctx.agencyId, item.clientId, contentHash);
+    const assetMeta: Record<string, unknown> = { model: result.model, prompt, contentHash };
+    let url: string;
+    if (existing) {
+      url = existing.url;
+      assetMeta.dedupedFrom = existing.id;
+    } else {
+      const key = `${item.clientId}/${itemId}/${this.idGen()}.png`;
+      const stored = await this.deps.storage.put(key, result.bytes, result.contentType);
+      url = stored.url;
+    }
 
     return this.deps.assets.create(ctx.agencyId, {
       contentItemId: itemId,
       kind: "image",
-      url: stored.url,
+      url,
       source: "generated",
-      meta: { model: result.model, prompt },
+      contentHash,
+      meta: assetMeta,
     });
   }
 

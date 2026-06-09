@@ -15,7 +15,12 @@ export type AiAction =
   | "trend_analysis"
   | "research_brief"
   | "video_script"
-  | "tts_generation";
+  | "tts_generation"
+  // Specialist-agents design path (P3-08): one action per specialist agent.
+  | "design_direction"
+  | "design_copy"
+  | "design_color"
+  | "design_imagery";
 
 export type AiAuditStatus = "success" | "error";
 

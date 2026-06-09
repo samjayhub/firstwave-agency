@@ -37,6 +37,9 @@ export const competitorLimiter = new InMemoryRateLimiter(6, 60 * MIN);
 // Trend sweep fans out to Google Trends + an LLM synthesis — 6 per
 // agency+client per hour.
 export const trendLimiter = new InMemoryRateLimiter(6, 60 * MIN);
+// Manual scheduler tick (ops trigger; the cron heartbeat is the normal path) —
+// 12 per agency per hour.
+export const schedulerTickLimiter = new InMemoryRateLimiter(12, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

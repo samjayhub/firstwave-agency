@@ -24,6 +24,11 @@ import { runCompetitorJob, type CompetitorJobData } from "./competitor-job";
 import { runTrendJob, type TrendJobData } from "./trend-job";
 import { runVideoJob, type VideoJobData } from "./video-job";
 import { runFetchMetricsJob, type FetchMetricsJobData } from "./fetch-metrics-job";
+import { runSchedulerJob, type SchedulerTickJobData } from "./scheduler-job";
+import { registerSchedulerTick } from "./scheduler-queue";
+import { enqueuePublish } from "./publish-queue";
+import { SchedulerService } from "@/lib/scheduler";
+import { prismaSchedulerStore } from "@/lib/repositories/prisma-stores";
 import { ResearchService } from "@/lib/research";
 import { CompetitorService } from "@/lib/competitor";
 import { AnalyticsService } from "@/lib/analytics";
@@ -223,13 +228,40 @@ function startMetricsWorker(): Worker<FetchMetricsJobData> {
   return worker;
 }
 
-function main() {
+function startSchedulerWorker(): Worker<SchedulerTickJobData> {
+  const prisma = getPrisma();
+  const scheduler = new SchedulerService({
+    store: prismaSchedulerStore(prisma),
+    enqueue: enqueuePublish,
+  });
+
+  const worker = new Worker<SchedulerTickJobData>(
+    QUEUE_NAMES.schedulerTick,
+    async (job) => runSchedulerJob({ scheduler }, job.data),
+    { connection: redisConnection() },
+  );
+  worker.on("completed", (job) =>
+    logger.info("scheduler tick completed", {
+      jobId: job.id,
+      scheduled: job.returnvalue?.scheduled,
+    }),
+  );
+  worker.on("failed", (job, err) =>
+    logger.error("scheduler tick failed", { jobId: job?.id, message: err.message }),
+  );
+  return worker;
+}
+
+async function main() {
   startPublishWorker();
   startResearchWorker();
   startCompetitorWorker();
   startTrendWorker();
   startVideoWorker();
   startMetricsWorker();
+  startSchedulerWorker();
+  // Install the repeatable heartbeat that drives auto-publishing (P4-01).
+  await registerSchedulerTick();
   logger.info("worker started", {
     queues: [
       QUEUE_NAMES.publish,
@@ -238,8 +270,9 @@ function main() {
       QUEUE_NAMES.trendSweep,
       QUEUE_NAMES.produceVideo,
       QUEUE_NAMES.fetchMetrics,
+      QUEUE_NAMES.schedulerTick,
     ],
   });
 }
 
-main();
+void main();

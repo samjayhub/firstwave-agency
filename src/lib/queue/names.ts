@@ -9,4 +9,5 @@ export const QUEUE_NAMES = {
   produceVideo: "produce-video",
   publish: "publish",
   fetchMetrics: "fetch-metrics",
+  schedulerTick: "scheduler-tick",
 } as const;

@@ -26,6 +26,10 @@ export const envSchema = z.object({
   IMAGE_GEN_API_KEY: z.string().optional(),
   // Competitor Intelligence — free YouTube Data API v3 key (P2-02).
   YOUTUBE_API_KEY: z.string().optional(),
+  // YouTube publishing — Google OAuth client for resumable video upload (P2-05).
+  YOUTUBE_CLIENT_ID: z.string().optional(),
+  YOUTUBE_CLIENT_SECRET: z.string().optional(),
+  YOUTUBE_REDIRECT_URI: z.string().url().optional(),
 
   // LinkedIn — the MVP publishing platform (PR7).
   LINKEDIN_CLIENT_ID: z.string().optional(),

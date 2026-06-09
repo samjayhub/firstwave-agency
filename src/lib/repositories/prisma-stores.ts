@@ -23,6 +23,7 @@ import type { PublishJobStore } from "@/lib/publish/job";
 import type { Platform } from "@/lib/publishers/types";
 import type { ResearchBrief, ResearchBriefStore } from "@/lib/research/types";
 import type { CompetitorBrief, CompetitorStore } from "@/lib/competitor/types";
+import type { TrendBrief, TrendStore } from "@/lib/trend/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -408,6 +409,49 @@ export function prismaCompetitorStore(prisma: PrismaClient): CompetitorStore {
       });
       if (!row || row.competitorBrief == null) return null;
       return row.competitorBrief as unknown as CompetitorBrief;
+    },
+  };
+}
+
+export function prismaTrendStore(prisma: PrismaClient): TrendStore {
+  return {
+    save: async (agencyId, clientId, signals, brief) =>
+      prisma.$transaction(async (tx) => {
+        // Isolation in the predicate: the client must belong to the agency.
+        const client = await tx.client.findFirst({
+          where: { id: clientId, agencyId },
+          select: { id: true },
+        });
+        if (!client) throw new NotFoundError("Client not found");
+        // Aggregate brief on the client — what the planner reads.
+        await tx.client.update({
+          where: { id: clientId },
+          data: { trendBrief: brief as unknown as Prisma.InputJsonValue },
+        });
+        // Append a Trend row per ranked signal capturing this sweep's snapshot.
+        for (const s of signals) {
+          await tx.trend.create({
+            data: {
+              clientId,
+              platform: s.platform,
+              topic: s.topic,
+              signal: {
+                volume: s.volume,
+                growth: s.growth,
+                score: s.score,
+                sampleRefs: s.sampleRefs,
+              } as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+      }),
+    getBrief: async (agencyId, clientId): Promise<TrendBrief | null> => {
+      const row = await prisma.client.findFirst({
+        where: { id: clientId, agencyId },
+        select: { trendBrief: true },
+      });
+      if (!row || row.trendBrief == null) return null;
+      return row.trendBrief as unknown as TrendBrief;
     },
   };
 }

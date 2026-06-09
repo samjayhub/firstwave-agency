@@ -23,6 +23,9 @@ export const researchLimiter = new InMemoryRateLimiter(6, 60 * MIN);
 // Competitor sweep fans out to the YouTube API + an LLM synthesis — 6 per
 // agency+client per hour.
 export const competitorLimiter = new InMemoryRateLimiter(6, 60 * MIN);
+// Trend sweep fans out to Google Trends + an LLM synthesis — 6 per
+// agency+client per hour.
+export const trendLimiter = new InMemoryRateLimiter(6, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

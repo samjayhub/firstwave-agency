@@ -30,7 +30,8 @@ export interface NewAsset {
   contentItemId: string;
   kind: "image" | "video";
   url: string;
-  source: "generated";
+  // "upload" is used by the public API asset-push endpoint (P4-08).
+  source: "generated" | "upload";
   meta?: Record<string, unknown>;
 }
 

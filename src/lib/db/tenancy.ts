@@ -31,6 +31,8 @@ export const TENANT_SCOPED_MODELS = {
   ReviewComment: "via-item",
   Notification: "direct",
   NotificationSetting: "direct",
+  ApiKey: "direct",
+  Webhook: "direct",
 } as const;
 
 export type TenantScopedModel = keyof typeof TENANT_SCOPED_MODELS;

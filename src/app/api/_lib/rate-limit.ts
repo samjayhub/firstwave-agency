@@ -46,6 +46,8 @@ export const reviewLinkLimiter = new InMemoryRateLimiter(20, 60 * MIN);
 export const reviewDecisionLimiter = new InMemoryRateLimiter(60, 60 * MIN);
 // Emailing a performance report — 20 per agency+client per hour.
 export const reportSendLimiter = new InMemoryRateLimiter(20, 60 * MIN);
+// Public API surface — 600 requests per agency per hour (keyed by agencyId).
+export const apiV1Limiter = new InMemoryRateLimiter(600, 60 * MIN);
 
 /** Best-effort client IP from proxy headers. */
 export function clientIp(req: Request): string {

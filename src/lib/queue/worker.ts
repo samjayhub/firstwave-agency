@@ -58,7 +58,8 @@ import { prismaNotificationStore, prismaReportStore } from "@/lib/repositories/p
 import { ReportService } from "@/lib/reporting";
 import { httpReportSender, logReportSender } from "@/lib/reporting/sender";
 import { registerReportDigest, type ReportDigestJobData } from "./report-digest-queue";
-import { prismaBrandingStore } from "@/lib/repositories/prisma-stores";
+import { prismaBrandingStore, prismaWebhookStore } from "@/lib/repositories/prisma-stores";
+import { WebhookService, type WebhookEvent } from "@/lib/webhooks";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import { PrismaAuditSink } from "@/lib/db/audit-sink";
 import { getLlmProvider, DEFAULT_LLM_MODEL } from "@/lib/llm";
@@ -82,6 +83,23 @@ function buildNotificationService(): NotificationService {
 }
 
 const notifications = buildNotificationService();
+const webhooks = new WebhookService({ store: prismaWebhookStore(getPrisma()) });
+
+/** Best-effort webhook fan-out — a delivery failure must never crash a job. */
+async function safeDispatch(
+  agencyId: string,
+  event: WebhookEvent,
+  data: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await webhooks.dispatch(agencyId, event, data);
+  } catch (err) {
+    logger.error("webhook dispatch failed", {
+      event,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
 
 /** Best-effort alert — a notification failure must never crash a worker job. */
 async function safeNotify(event: Parameters<NotificationService["emit"]>[0]): Promise<void> {
@@ -118,16 +136,24 @@ function startPublishWorker(): Worker<PublishJobData> {
     },
     { connection: redisConnection() },
   );
-  worker.on("completed", (job) => logger.info("publish job completed", { jobId: job.id }));
+  worker.on("completed", async (job) => {
+    logger.info("publish job completed", { jobId: job.id });
+    // Webhook fan-out: a post went live (P4-08).
+    await safeDispatch(job.data.agencyId, "publish.succeeded", { itemId: job.data.itemId });
+  });
   worker.on("failed", async (job, err) => {
     logger.error("publish job failed", { jobId: job?.id, message: err.message });
-    // Dead-letter alert: only on the FINAL attempt (retries exhausted) (P4-06).
+    // Dead-letter alert + webhook: only on the FINAL attempt (P4-06/P4-08).
     if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
       await safeNotify({
         agencyId: job.data.agencyId,
         kind: "publish_failed",
         title: "Publishing failed",
         body: `A post for item ${job.data.itemId} failed after all retries: ${err.message}`,
+      });
+      await safeDispatch(job.data.agencyId, "publish.failed", {
+        itemId: job.data.itemId,
+        error: err.message,
       });
     }
   });
@@ -266,6 +292,11 @@ function startMetricsWorker(): Worker<FetchMetricsJobData> {
     async (job) => {
       try {
         const snapshot = await runFetchMetricsJob({ analytics }, job.data);
+        // Webhook fan-out: fresh metrics for a post (P4-08).
+        await safeDispatch(job.data.agencyId, "metric.snapshot", {
+          publishJobId: job.data.publishJobId,
+          metrics: snapshot.metrics,
+        });
         // Milestone alert: impressions crossed the configured threshold (P4-06).
         const impressions = snapshot.metrics.impressions ?? 0;
         const threshold = getEnv().NOTIFY_MILESTONE_IMPRESSIONS;

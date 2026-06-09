@@ -5,6 +5,8 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { NotFoundError } from "@/lib/errors/app-error";
 import type { ClientStore } from "./client-repository";
 import type { AuthStore } from "@/lib/auth/auth-service";
+import type { Role } from "@/lib/auth/roles";
+import type { TeamStore } from "@/lib/team/types";
 // Type-only imports keep the brand-intel/LLM runtime out of route bundles.
 import type { BrandProfileStore } from "@/lib/brand-intel";
 import type {
@@ -515,6 +517,45 @@ export function prismaAnalyticsStore(prisma: PrismaClient): AnalyticsStore {
         metrics: (r.metrics ?? {}) as unknown as PostMetrics,
         capturedAt: r.capturedAt,
       }));
+    },
+  };
+}
+
+const TEAM_USER_SELECT = {
+  id: true,
+  agencyId: true,
+  email: true,
+  role: true,
+  createdAt: true,
+} as const;
+
+export function prismaTeamStore(prisma: PrismaClient): TeamStore {
+  return {
+    listByAgency: (agencyId) =>
+      prisma.user.findMany({
+        where: { agencyId },
+        orderBy: { createdAt: "desc" },
+        select: TEAM_USER_SELECT,
+      }),
+    findInAgency: (agencyId, userId) =>
+      prisma.user.findFirst({ where: { id: userId, agencyId }, select: TEAM_USER_SELECT }),
+    countAdmins: (agencyId) =>
+      prisma.user.count({ where: { agencyId, role: "agency_admin" } }),
+    create: ({ agencyId, email, role, passwordHash }) =>
+      prisma.user.create({
+        data: { agencyId, email, role, passwordHash },
+        select: TEAM_USER_SELECT,
+      }),
+    // Scoped write: the agencyId is part of the predicate, so a cross-tenant id
+    // matches nothing (count 0 => null) — isolation lives in the write itself.
+    setRole: async (agencyId, userId, role: Role) => {
+      const res = await prisma.user.updateMany({ where: { id: userId, agencyId }, data: { role } });
+      if (res.count === 0) return null;
+      return prisma.user.findFirst({ where: { id: userId, agencyId }, select: TEAM_USER_SELECT });
+    },
+    remove: async (agencyId, userId) => {
+      const res = await prisma.user.deleteMany({ where: { id: userId, agencyId } });
+      return res.count > 0;
     },
   };
 }

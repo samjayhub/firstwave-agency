@@ -3,6 +3,7 @@
 import { getPrisma } from "@/lib/db/prisma";
 import { requireEnv } from "@/lib/config/env";
 import { AuthService } from "@/lib/auth/auth-service";
+import { TeamService } from "@/lib/team";
 import { requireAuth, type AuthContext } from "@/lib/auth/guard";
 import { readSessionToken } from "@/lib/auth/session";
 import { ClientRepository } from "@/lib/repositories/client-repository";
@@ -12,6 +13,7 @@ import {
   prismaAuthStore,
   prismaClientStore,
   prismaConnectedAccountRepository,
+  prismaTeamStore,
 } from "@/lib/repositories/prisma-stores";
 import { ApprovalService } from "@/lib/approval";
 import { ConnectionService } from "@/lib/connections";
@@ -23,6 +25,10 @@ export function authService(): AuthService {
     store: prismaAuthStore(getPrisma()),
     secret: requireEnv("JWT_SECRET"),
   });
+}
+
+export function teamService(): TeamService {
+  return new TeamService({ store: prismaTeamStore(getPrisma()) });
 }
 
 export function clientRepository(): ClientRepository {

@@ -16,6 +16,9 @@ export const contentPlanLimiter = new InMemoryRateLimiter(10, 60 * MIN);
 export const copyGenLimiter = new InMemoryRateLimiter(60, 60 * MIN);
 // Image generation (metered creative compute).
 export const imageGenLimiter = new InMemoryRateLimiter(30, 60 * MIN);
+// Video production is the most expensive path (script LLM + N image gens + TTS +
+// assembly) — 3 per agency+item per hour.
+export const videoGenLimiter = new InMemoryRateLimiter(3, 60 * MIN);
 // Publishing reaches a real social network — throttle per agency+item.
 export const publishLimiter = new InMemoryRateLimiter(20, 60 * MIN);
 // Research triggers an LLM call per job — 6 per agency+client per hour.

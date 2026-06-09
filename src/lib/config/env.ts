@@ -46,6 +46,14 @@ export const envSchema = z.object({
   TIKTOK_CLIENT_SECRET: z.string().optional(),
   TIKTOK_REDIRECT_URI: z.string().url().optional(),
 
+  // Text-to-speech for the video narration track (P3-01). Fake until a key is set.
+  TTS_PROVIDER: z.enum(["openai", "elevenlabs", "fake"]).default("fake"),
+  TTS_API_KEY: z.string().optional(),
+  // Video assembly (P3-01). `ffmpeg` shells out to the local binary; `fake` stitches
+  // a deterministic placeholder so the pipeline is end-to-end testable with no deps.
+  VIDEO_ASSEMBLER: z.enum(["ffmpeg", "fake"]).default("fake"),
+  FFMPEG_PATH: z.string().default("ffmpeg"),
+
   // Generated-media storage. Local dir for MVP; swap to S3/R2 later.
   ASSET_STORAGE_DIR: z.string().default("./.assets"),
 });

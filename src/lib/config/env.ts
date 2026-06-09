@@ -46,6 +46,12 @@ export const envSchema = z.object({
   TIKTOK_CLIENT_SECRET: z.string().optional(),
   TIKTOK_REDIRECT_URI: z.string().url().optional(),
 
+  // X (Twitter) publishing — OAuth 2.0 confidential client + API v2 (P3-03).
+  // The one paid platform; only wired when a client needs it.
+  X_CLIENT_ID: z.string().optional(),
+  X_CLIENT_SECRET: z.string().optional(),
+  X_REDIRECT_URI: z.string().url().optional(),
+
   // Text-to-speech for the video narration track (P3-01). Fake until a key is set.
   TTS_PROVIDER: z.enum(["openai", "elevenlabs", "fake"]).default("fake"),
   TTS_API_KEY: z.string().optional(),

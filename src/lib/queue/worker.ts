@@ -22,10 +22,23 @@ import { isRetryable, runPublishJob, type PublishJobData } from "@/lib/publish/j
 import { runResearchJob, type ResearchJobData } from "./research-job";
 import { runCompetitorJob, type CompetitorJobData } from "./competitor-job";
 import { runTrendJob, type TrendJobData } from "./trend-job";
+import { runVideoJob, type VideoJobData } from "./video-job";
 import { runFetchMetricsJob, type FetchMetricsJobData } from "./fetch-metrics-job";
 import { ResearchService } from "@/lib/research";
 import { CompetitorService } from "@/lib/competitor";
 import { AnalyticsService } from "@/lib/analytics";
+import {
+  VideoStudioService,
+  getBrollProvider,
+  getTtsProvider,
+  getVideoAssembler,
+} from "@/lib/video";
+import {
+  prismaAssetRepository,
+  prismaBrandProfileStore,
+  prismaContentItemStore,
+} from "@/lib/repositories/prisma-stores";
+import { getAssetStorage } from "@/lib/creative";
 import { youtubeCompetitorSource } from "@/lib/competitor/youtube";
 import { TrendService } from "@/lib/trend";
 import { googleTrendsSource } from "@/lib/trend/google-trends";
@@ -150,6 +163,35 @@ function startTrendWorker(): Worker<TrendJobData> {
   return worker;
 }
 
+function startVideoWorker(): Worker<VideoJobData> {
+  const prisma = getPrisma();
+  const video = new VideoStudioService({
+    llm: getLlmProvider(),
+    model: DEFAULT_LLM_MODEL,
+    tts: getTtsProvider(),
+    broll: getBrollProvider(),
+    assembler: getVideoAssembler(),
+    storage: getAssetStorage(),
+    assets: prismaAssetRepository(prisma),
+    items: prismaContentItemStore(prisma),
+    brandProfiles: prismaBrandProfileStore(prisma),
+    sink: new PrismaAuditSink(prisma),
+  });
+
+  const worker = new Worker<VideoJobData>(
+    QUEUE_NAMES.produceVideo,
+    async (job) => runVideoJob({ video }, job.data),
+    { connection: redisConnection() },
+  );
+  worker.on("completed", (job) =>
+    logger.info("video job completed", { jobId: job.id }),
+  );
+  worker.on("failed", (job, err) =>
+    logger.error("video job failed", { jobId: job?.id, message: err.message }),
+  );
+  return worker;
+}
+
 function startMetricsWorker(): Worker<FetchMetricsJobData> {
   const prisma = getPrisma();
   const analytics = new AnalyticsService({
@@ -186,6 +228,7 @@ function main() {
   startResearchWorker();
   startCompetitorWorker();
   startTrendWorker();
+  startVideoWorker();
   startMetricsWorker();
   logger.info("worker started", {
     queues: [
@@ -193,6 +236,7 @@ function main() {
       QUEUE_NAMES.researchSweep,
       QUEUE_NAMES.competitorSweep,
       QUEUE_NAMES.trendSweep,
+      QUEUE_NAMES.produceVideo,
       QUEUE_NAMES.fetchMetrics,
     ],
   });

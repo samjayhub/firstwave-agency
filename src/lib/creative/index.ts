@@ -27,7 +27,7 @@ export interface AssetRecord {
 
 export interface NewAsset {
   contentItemId: string;
-  kind: "image";
+  kind: "image" | "video";
   url: string;
   source: "generated";
   meta?: Record<string, unknown>;

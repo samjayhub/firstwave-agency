@@ -6,6 +6,7 @@ export const QUEUE_NAMES = {
   trendSweep: "trend-sweep",
   contentPlan: "content-plan",
   generateCreative: "generate-creative",
+  produceVideo: "produce-video",
   publish: "publish",
   fetchMetrics: "fetch-metrics",
 } as const;

@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { ReviewService } from "./index";
 import { FakeReviewStore } from "./fakes";
 import { FakeBrandingStore } from "@/lib/repositories/fakes/fake-branding-store";
+import { ValidationError } from "@/lib/errors/app-error";
 
 const CTX = { agencyId: "ag1" };
 
@@ -101,5 +102,46 @@ describe("ReviewService — reviewer portal", () => {
     await expect(svc.decide(token, "ghost", "approve")).rejects.toMatchObject({
       code: "NOT_FOUND",
     });
+  });
+
+  it("runs the compliance gate on a reviewer approval and blocks it (P4-09)", async () => {
+    const { store: s2, branding } = setup();
+    const calls: Array<[string, string]> = [];
+    const gated = new ReviewService({
+      store: s2,
+      branding,
+      generateToken: () => "tok-x",
+      baseUrl: "https://app.example.com/",
+      compliance: {
+        assertApprovable: async (agencyId, itemId) => {
+          calls.push([agencyId, itemId]);
+          throw new ValidationError("Blocked by compliance");
+        },
+      },
+    });
+    const tok = (await gated.createLink(CTX, "c1")).share.token;
+    await expect(gated.decide(tok, "it1", "approve")).rejects.toMatchObject({ code: "VALIDATION" });
+    expect(calls).toEqual([["ag1", "it1"]]);
+    // Blocked — the item stays in review.
+    expect(s2.items.find((i) => i.id === "it1")!.status).toBe("in_review");
+  });
+
+  it("does not gate a request_changes decision", async () => {
+    const { store: s2, branding } = setup();
+    let called = false;
+    const gated = new ReviewService({
+      store: s2,
+      branding,
+      generateToken: () => "tok-y",
+      baseUrl: "https://app.example.com/",
+      compliance: {
+        assertApprovable: async () => {
+          called = true;
+        },
+      },
+    });
+    const tok = (await gated.createLink(CTX, "c1")).share.token;
+    await gated.decide(tok, "it1", "request_changes", "fix it");
+    expect(called).toBe(false);
   });
 });

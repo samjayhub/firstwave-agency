@@ -34,6 +34,7 @@ import type { SchedulerStore } from "@/lib/scheduler/types";
 import type { PerformanceStore } from "@/lib/performance/types";
 import type { ReviewStore } from "@/lib/review/types";
 import type { NotificationKind, NotificationStore } from "@/lib/notifications/types";
+import type { ComplianceConfig, ComplianceStore } from "@/lib/compliance/types";
 import type { ReportStore } from "@/lib/reporting/types";
 import type { ApiKeyStore } from "@/lib/api-keys";
 import type { WebhookEvent, WebhookStore } from "@/lib/webhooks";
@@ -590,6 +591,47 @@ export function prismaNotificationStore(prisma: PrismaClient): NotificationStore
       });
       return { ...row, mutedKinds: row.mutedKinds as NotificationKind[] };
     },
+  };
+}
+
+export function prismaComplianceStore(prisma: PrismaClient): ComplianceStore {
+  const CONFIG_SELECT = {
+    enabled: true,
+    bannedTerms: true,
+    requireDisclosure: true,
+    disclosureTags: true,
+  } as const;
+  return {
+    loadItem: async (agencyId, itemId) => {
+      const row = await prisma.contentItem.findFirst({
+        where: { id: itemId, plan: { client: { agencyId } } },
+        select: { copy: true, targets: { select: { platform: true } } },
+      });
+      if (!row) return null;
+      return { copy: row.copy, platforms: row.targets.map((t) => t.platform as Platform) };
+    },
+    getConfig: (agencyId): Promise<ComplianceConfig | null> =>
+      prisma.complianceSetting.findUnique({ where: { agencyId }, select: CONFIG_SELECT }),
+    upsertConfig: (agencyId, patch): Promise<ComplianceConfig> =>
+      prisma.complianceSetting.upsert({
+        where: { agencyId },
+        create: {
+          agencyId,
+          enabled: patch.enabled ?? true,
+          bannedTerms: patch.bannedTerms ?? [],
+          requireDisclosure: patch.requireDisclosure ?? false,
+          disclosureTags: patch.disclosureTags ?? ["#ad", "#sponsored"],
+        },
+        update: {
+          ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+          ...(patch.bannedTerms !== undefined ? { bannedTerms: patch.bannedTerms } : {}),
+          ...(patch.requireDisclosure !== undefined
+            ? { requireDisclosure: patch.requireDisclosure }
+            : {}),
+          ...(patch.disclosureTags !== undefined ? { disclosureTags: patch.disclosureTags } : {}),
+        },
+        select: CONFIG_SELECT,
+      }),
   };
 }
 

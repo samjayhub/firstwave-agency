@@ -22,11 +22,13 @@ import {
   prismaNotificationStore,
   prismaPerformanceStore,
   prismaReportStore,
+  prismaComplianceStore,
   prismaReviewStore,
   prismaSchedulerStore,
   prismaTeamStore,
   prismaWebhookStore,
 } from "@/lib/repositories/prisma-stores";
+import { ComplianceService } from "@/lib/compliance";
 import { ApiKeyService } from "@/lib/api-keys";
 import { WebhookService } from "@/lib/webhooks";
 import { PerformanceService } from "@/lib/performance";
@@ -61,8 +63,12 @@ export function clientRepository(): ClientRepository {
   return new ClientRepository(prismaClientStore(getPrisma()));
 }
 
+export function complianceService(): ComplianceService {
+  return new ComplianceService({ store: prismaComplianceStore(getPrisma()) });
+}
+
 export function approvalService(): ApprovalService {
-  return new ApprovalService(prismaApprovalStore(getPrisma()));
+  return new ApprovalService(prismaApprovalStore(getPrisma()), complianceService());
 }
 
 export function connectionService(): ConnectionService {
@@ -165,6 +171,7 @@ export function reviewService(): ReviewService {
     branding: prismaBrandingStore(getPrisma()),
     generateToken: () => randomBytes(24).toString("hex"),
     baseUrl: getEnv().APP_BASE_URL,
+    compliance: complianceService(),
   });
 }
 

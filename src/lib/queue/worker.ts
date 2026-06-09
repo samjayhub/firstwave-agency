@@ -47,6 +47,10 @@ import { getAssetStorage } from "@/lib/creative";
 import { youtubeCompetitorSource } from "@/lib/competitor/youtube";
 import { TrendService } from "@/lib/trend";
 import { googleTrendsSource } from "@/lib/trend/google-trends";
+import { youtubeTrendingSource } from "@/lib/trend/youtube-trending";
+import { tiktokCreativeCenterSource } from "@/lib/trend/tiktok-creative-center";
+import { combineSources } from "@/lib/trend/combine";
+import { getEnv } from "@/lib/config/env";
 import { ClientRepository } from "@/lib/repositories/client-repository";
 import { PrismaAuditSink } from "@/lib/db/audit-sink";
 import { getLlmProvider, DEFAULT_LLM_MODEL } from "@/lib/llm";
@@ -145,13 +149,22 @@ function startCompetitorWorker(): Worker<CompetitorJobData> {
 
 function startTrendWorker(): Worker<TrendJobData> {
   const prisma = getPrisma();
+  // Trend Engine v2 (P4-05): fan in Google Trends + TikTok Creative Center, plus
+  // YouTube trending when the (free) Data API key is configured. combineSources
+  // tolerates any single source failing, so the sweep degrades gracefully.
+  const youtubeKey = getEnv().YOUTUBE_API_KEY;
+  const sources = [
+    googleTrendsSource(),
+    tiktokCreativeCenterSource(),
+    ...(youtubeKey ? [youtubeTrendingSource({ apiKey: youtubeKey })] : []),
+  ];
   const trend = new TrendService({
     llm: getLlmProvider(),
     sink: new PrismaAuditSink(prisma),
     model: DEFAULT_LLM_MODEL,
     store: prismaTrendStore(prisma),
     clients: new ClientRepository(prismaClientStore(prisma)),
-    source: googleTrendsSource(),
+    source: combineSources(...sources),
   });
 
   const worker = new Worker<TrendJobData>(

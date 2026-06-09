@@ -5,6 +5,7 @@ import type { Platform, Publisher } from "./types";
 import { LinkedInPublisher } from "./linkedin";
 import { MetaPublisher } from "./meta";
 import { YouTubePublisher } from "./youtube";
+import { TikTokPublisher } from "./tiktok";
 
 export function getPublisher(platform: Platform): Publisher {
   switch (platform) {
@@ -25,8 +26,13 @@ export function getPublisher(platform: Platform): Publisher {
         clientId: requireEnv("YOUTUBE_CLIENT_ID"),
         clientSecret: requireEnv("YOUTUBE_CLIENT_SECRET"),
       });
+    case "tiktok":
+      return new TikTokPublisher({
+        clientKey: requireEnv("TIKTOK_CLIENT_KEY"),
+        clientSecret: requireEnv("TIKTOK_CLIENT_SECRET"),
+      });
     default:
-      // tiktok/pinterest = later Phase 2; x = paid (deferred).
+      // pinterest = later Phase 2; x = paid (deferred).
       throw new ValidationError(`No publisher adapter for platform "${platform}"`);
   }
 }

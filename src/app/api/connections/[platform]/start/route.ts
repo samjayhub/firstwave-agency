@@ -8,7 +8,7 @@ import type { Platform } from "@/lib/publishers/types";
 
 export const runtime = "nodejs";
 
-const SUPPORTED = new Set<Platform>(["linkedin", "meta_fb", "meta_ig", "youtube"]);
+const SUPPORTED = new Set<Platform>(["linkedin", "meta_fb", "meta_ig", "youtube", "tiktok"]);
 
 /** Per-platform OAuth redirect URI env var. */
 function redirectUriFor(platform: Platform): string {
@@ -16,6 +16,7 @@ function redirectUriFor(platform: Platform): string {
     return requireEnv("META_REDIRECT_URI");
   }
   if (platform === "youtube") return requireEnv("YOUTUBE_REDIRECT_URI");
+  if (platform === "tiktok") return requireEnv("TIKTOK_REDIRECT_URI");
   return requireEnv("LINKEDIN_REDIRECT_URI");
 }
 

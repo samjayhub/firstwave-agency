@@ -41,6 +41,11 @@ export const envSchema = z.object({
   META_APP_SECRET: z.string().optional(),
   META_REDIRECT_URI: z.string().url().optional(),
 
+  // TikTok publishing — Login Kit + Content Posting API (P2-06).
+  TIKTOK_CLIENT_KEY: z.string().optional(),
+  TIKTOK_CLIENT_SECRET: z.string().optional(),
+  TIKTOK_REDIRECT_URI: z.string().url().optional(),
+
   // Generated-media storage. Local dir for MVP; swap to S3/R2 later.
   ASSET_STORAGE_DIR: z.string().default("./.assets"),
 });

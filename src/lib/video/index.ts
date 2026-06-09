@@ -9,7 +9,7 @@ import type { TenantContext } from "@/lib/db/tenancy";
 import { withAudit, type AiAuditSink, type AiAuditMeta } from "@/lib/audit";
 import type { LlmProvider } from "@/lib/llm";
 import { extractJsonObject } from "@/lib/llm/json";
-import { getEnv } from "@/lib/config/env";
+import { getEnv, requireEnv } from "@/lib/config/env";
 import { ExternalServiceError, NotFoundError, ValidationError } from "@/lib/errors/app-error";
 import type { BrandProfileStore } from "@/lib/brand-intel";
 import type { ContentItemStore } from "@/lib/copy";
@@ -27,6 +27,7 @@ import {
 import { FakeTtsProvider } from "./fakes/fake-tts-provider";
 import { FakeVideoAssembler } from "./fakes/fake-video-assembler";
 import { HostedTtsProvider } from "./tts";
+import { SelfHostedTtsProvider } from "./self-hosted-tts";
 import { FfmpegVideoAssembler } from "./ffmpeg";
 import type {
   AssembledVideo,
@@ -259,6 +260,14 @@ function clamp(n: number, lo: number, hi: number): number {
 /** Production TTS provider — fake until a key/provider is configured. */
 export function getTtsProvider(): TtsProvider {
   const env = getEnv();
+  // Self-hosted open speech model on our own GPU — no API key (P3-07).
+  if (env.TTS_PROVIDER === "selfhosted") {
+    return new SelfHostedTtsProvider({
+      endpoint: requireEnv("SELF_HOSTED_TTS_URL"),
+      model: env.SELF_HOSTED_TTS_MODEL,
+      ...(env.SELF_HOSTED_GEN_TOKEN ? { token: env.SELF_HOSTED_GEN_TOKEN } : {}),
+    });
+  }
   if (env.TTS_PROVIDER === "fake" || !env.TTS_API_KEY) {
     return new FakeTtsProvider();
   }

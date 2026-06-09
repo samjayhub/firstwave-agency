@@ -12,6 +12,7 @@ import {
   prismaApprovalStore,
   prismaAuthStore,
   prismaBillingStore,
+  prismaBrandingStore,
   prismaClientStore,
   prismaConnectedAccountRepository,
   prismaTeamStore,
@@ -21,6 +22,7 @@ import { ConnectionService } from "@/lib/connections";
 import { AnalyticsService } from "@/lib/analytics";
 import { BillingService } from "@/lib/billing";
 import { HttpStripeGateway } from "@/lib/billing/stripe-gateway";
+import { WhiteLabelService } from "@/lib/whitelabel";
 import { getPublisher } from "@/lib/publishers";
 
 export function authService(): AuthService {
@@ -65,6 +67,10 @@ export function billingService(): BillingService {
       pro: requireEnv("STRIPE_PRICE_PRO"),
     },
   });
+}
+
+export function whiteLabelService(): WhiteLabelService {
+  return new WhiteLabelService({ store: prismaBrandingStore(getPrisma()) });
 }
 
 export function analyticsService(): AnalyticsService {

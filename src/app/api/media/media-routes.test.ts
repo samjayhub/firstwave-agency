@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
     versions: vi.fn(),
     setArchived: vi.fn(),
     runRetention: vi.fn(),
+    purgeArchived: vi.fn(),
   },
   authFn: () => ({ ctx: { agencyId: "ag1" }, userId: "u1", role: "agency_admin" as string }),
 }));
@@ -19,6 +20,7 @@ vi.mock("@/app/api/_lib/deps", () => ({
 
 import { GET as browseGET } from "../clients/[id]/media/route";
 import { POST as retentionPOST } from "../clients/[id]/media/retention/route";
+import { POST as purgePOST } from "../clients/[id]/media/purge/route";
 import { POST as reattachPOST } from "./[id]/reattach/route";
 import { PATCH as archivePATCH } from "./[id]/route";
 import { GET as versionsGET } from "./[id]/versions/route";
@@ -141,5 +143,27 @@ describe("POST /api/clients/[id]/media/retention", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ archived: 4 });
     expect(h.svc.runRetention).toHaveBeenCalledWith({ agencyId: "ag1" }, "cl1", 30);
+  });
+});
+
+describe("POST /api/clients/[id]/media/purge", () => {
+  it("403 for a non-admin", async () => {
+    h.authFn = () => ({ ctx: { agencyId: "ag1" }, userId: "u1", role: "strategist" });
+    const res = await purgePOST(
+      req("/api/clients/cl1/media/purge", "POST", { archivedForDays: 30 }),
+      { params: { id: "cl1" } },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("purges for an admin and returns the counts", async () => {
+    h.svc.purgeArchived.mockResolvedValue({ purged: 3, blobsDeleted: 2 });
+    const res = await purgePOST(
+      req("/api/clients/cl1/media/purge", "POST", { archivedForDays: 30 }),
+      { params: { id: "cl1" } },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ purged: 3, blobsDeleted: 2 });
+    expect(h.svc.purgeArchived).toHaveBeenCalledWith({ agencyId: "ag1" }, "cl1", 30);
   });
 });

@@ -31,6 +31,7 @@ import {
 } from "@/lib/repositories/prisma-stores";
 import { ComplianceService } from "@/lib/compliance";
 import { MediaLibraryService } from "@/lib/media";
+import { getAssetStorage } from "@/lib/creative";
 import { ApiKeyService } from "@/lib/api-keys";
 import { WebhookService } from "@/lib/webhooks";
 import { PerformanceService } from "@/lib/performance";
@@ -70,7 +71,10 @@ export function complianceService(): ComplianceService {
 }
 
 export function mediaLibraryService(): MediaLibraryService {
-  return new MediaLibraryService({ store: prismaMediaStore(getPrisma()) });
+  return new MediaLibraryService({
+    store: prismaMediaStore(getPrisma()),
+    storage: getAssetStorage(),
+  });
 }
 
 export function approvalService(): ApprovalService {

@@ -82,6 +82,15 @@ export const envSchema = z.object({
   // Generated-media storage. Local dir for MVP; swap to S3/R2 later.
   ASSET_STORAGE_DIR: z.string().default("./.assets"),
 
+  // Media library retention (P4-10 follow-up). The worker runs a sweep every
+  // MEDIA_RETENTION_MS (default 1 day; 0 disables the schedule). RETENTION_DAYS
+  // is the idle age before an unused asset is soft-archived; PURGE_DAYS is the
+  // age-since-archived before the row + its (unreferenced) blob are hard-deleted
+  // (0 = archive only, never purge).
+  MEDIA_RETENTION_MS: z.coerce.number().int().nonnegative().default(24 * 60 * 60 * 1000),
+  MEDIA_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+  MEDIA_PURGE_DAYS: z.coerce.number().int().nonnegative().default(30),
+
   // Notifications & alerts (P4-06). Slack/email targets are per-agency (stored in
   // NotificationSetting); these configure the shared email send endpoint and the
   // metric-milestone threshold. All optional — absent == that channel/alert off.

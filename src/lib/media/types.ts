@@ -68,7 +68,22 @@ export interface MediaStore {
   setArchived(agencyId: string, assetId: string, archived: boolean): Promise<boolean>;
   /**
    * Soft-archive a client's stale, reusable assets created before `before` that
-   * aren't attached to an in-use ({@link RETAINED_STATUSES}) item. Returns the count.
+   * aren't attached to an in-use ({@link RETAINED_STATUSES}) item, stamping
+   * `archivedAt = at` (the run time, so the purge stage waits from here). Count returned.
    */
-  archiveStale(agencyId: string, clientId: string, before: Date): Promise<number>;
+  archiveStale(agencyId: string, clientId: string, before: Date, at: Date): Promise<number>;
+
+  // ── Retention purge (P4-10 follow-up) ─────────────────────────
+  /** Assets archived before `before` (the second-stage hard-delete candidates). */
+  findPurgeable(
+    agencyId: string,
+    clientId: string,
+    before: Date,
+  ): Promise<Array<{ id: string; url: string }>>;
+  /** Hard-delete asset rows by id (agency-scoped). Returns the count removed. */
+  deleteAssets(agencyId: string, ids: string[]): Promise<number>;
+  /** How many surviving rows still reference this URL (blob-GC refcount). */
+  countByUrl(agencyId: string, url: string): Promise<number>;
+  /** Every (agencyId, clientId) the scheduled sweep should visit. */
+  sweepTargets(): Promise<Array<{ agencyId: string; clientId: string }>>;
 }

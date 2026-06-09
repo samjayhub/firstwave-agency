@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { MediaLibraryService } from "./index";
 import { FakeMediaStore } from "./fakes";
+import { InMemoryAssetStorage } from "@/lib/creative/asset-storage";
 
 const CTX = { agencyId: "ag1" };
+const NOW = new Date("2026-06-09T00:00:00Z");
+const OLD = new Date("2026-01-01T00:00:00Z");
 
 function setup() {
   const store = new FakeMediaStore();
@@ -150,5 +153,91 @@ describe("MediaLibraryService — lifecycle + retention", () => {
 
   it("rejects an out-of-range retention window", async () => {
     await expect(svc.runRetention(CTX, "cl1", 0)).rejects.toMatchObject({ code: "VALIDATION" });
+  });
+});
+
+describe("MediaLibraryService — purge (stage two)", () => {
+  let store: FakeMediaStore;
+  let storage: InMemoryAssetStorage;
+  let svc: MediaLibraryService;
+  beforeEach(() => {
+    store = new FakeMediaStore();
+    store.seedItem({ itemId: "it1", agencyId: "ag1", clientId: "cl1", status: "draft" });
+    storage = new InMemoryAssetStorage();
+    svc = new MediaLibraryService({ store, storage, clock: () => NOW });
+  });
+
+  it("hard-deletes long-archived assets and GCs their blob", async () => {
+    await storage.put("cl1/old.png", Buffer.from("x"), "image/png");
+    store.seedAsset({
+      agencyId: "ag1",
+      clientId: "cl1",
+      contentItemId: "it1",
+      url: "memory://cl1/old.png",
+      archivedAt: OLD,
+    });
+    const res = await svc.purgeArchived(CTX, "cl1", 30);
+    expect(res).toEqual({ purged: 1, blobsDeleted: 1 });
+    expect(storage.objects.has("cl1/old.png")).toBe(false);
+    expect(store.assets).toHaveLength(0);
+  });
+
+  it("keeps a blob still referenced by a surviving (deduped) asset", async () => {
+    await storage.put("cl1/shared.png", Buffer.from("x"), "image/png");
+    const url = "memory://cl1/shared.png";
+    store.seedAsset({ agencyId: "ag1", clientId: "cl1", contentItemId: "it1", url, archivedAt: OLD });
+    store.seedAsset({ agencyId: "ag1", clientId: "cl1", contentItemId: "it1", url }); // live, shares the blob
+    const res = await svc.purgeArchived(CTX, "cl1", 30);
+    expect(res).toEqual({ purged: 1, blobsDeleted: 0 });
+    expect(storage.objects.has("cl1/shared.png")).toBe(true); // GC skipped — still referenced
+    expect(store.assets).toHaveLength(1);
+  });
+
+  it("does not purge assets archived more recently than the window", async () => {
+    store.seedAsset({
+      agencyId: "ag1",
+      clientId: "cl1",
+      contentItemId: "it1",
+      archivedAt: new Date("2026-06-08T00:00:00Z"), // 1 day ago
+    });
+    expect(await svc.purgeArchived(CTX, "cl1", 30)).toEqual({ purged: 0, blobsDeleted: 0 });
+  });
+
+  it("rejects a negative purge window", async () => {
+    await expect(svc.purgeArchived(CTX, "cl1", -1)).rejects.toMatchObject({ code: "VALIDATION" });
+  });
+});
+
+describe("MediaLibraryService — scheduled sweep", () => {
+  it("archives stale then purges long-archived across every client, in one pass", async () => {
+    const store = new FakeMediaStore();
+    store.seedItem({ itemId: "a", agencyId: "ag1", clientId: "cl1", status: "draft" });
+    store.seedItem({ itemId: "b", agencyId: "ag1", clientId: "cl2", status: "draft" });
+    const svc = new MediaLibraryService({
+      store,
+      storage: new InMemoryAssetStorage(),
+      clock: () => NOW,
+    });
+    // cl1: a stale generated asset → soft-archived this pass.
+    store.seedAsset({ agencyId: "ag1", clientId: "cl1", contentItemId: "a", createdAt: OLD });
+    // cl2: an already-long-archived asset → purged this pass.
+    store.seedAsset({ agencyId: "ag1", clientId: "cl2", contentItemId: "b", archivedAt: OLD });
+
+    const res = await svc.runRetentionSweep(90, 30);
+    expect(res.clients).toBe(2);
+    expect(res.archived).toBe(1);
+    expect(res.purged).toBe(1);
+    // The just-archived cl1 asset is stamped at NOW, so it is NOT purged this pass.
+    expect(store.assets.find((x) => x.clientId === "cl1")!.archivedAt).toEqual(NOW);
+  });
+
+  it("archive-only when purgeDays is null", async () => {
+    const store = new FakeMediaStore();
+    store.seedItem({ itemId: "a", agencyId: "ag1", clientId: "cl1", status: "draft" });
+    store.seedAsset({ agencyId: "ag1", clientId: "cl1", contentItemId: "a", archivedAt: OLD });
+    const svc = new MediaLibraryService({ store, clock: () => NOW });
+    const res = await svc.runRetentionSweep(90, null);
+    expect(res.purged).toBe(0);
+    expect(store.assets).toHaveLength(1); // nothing hard-deleted
   });
 });

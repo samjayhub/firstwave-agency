@@ -11,4 +11,5 @@ export const QUEUE_NAMES = {
   fetchMetrics: "fetch-metrics",
   schedulerTick: "scheduler-tick",
   reportDigest: "report-digest",
+  mediaRetention: "media-retention",
 } as const;

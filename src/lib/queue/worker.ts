@@ -58,6 +58,10 @@ import { prismaNotificationStore, prismaReportStore } from "@/lib/repositories/p
 import { ReportService } from "@/lib/reporting";
 import { httpReportSender, logReportSender } from "@/lib/reporting/sender";
 import { registerReportDigest, type ReportDigestJobData } from "./report-digest-queue";
+import { registerMediaRetention } from "./media-retention-queue";
+import { runMediaRetentionJob, type MediaRetentionJobData } from "./media-retention-job";
+import { MediaLibraryService } from "@/lib/media";
+import { prismaMediaStore } from "@/lib/repositories/prisma-stores";
 import { prismaBrandingStore, prismaWebhookStore } from "@/lib/repositories/prisma-stores";
 import { WebhookService, type WebhookEvent } from "@/lib/webhooks";
 import { ClientRepository } from "@/lib/repositories/client-repository";
@@ -382,6 +386,32 @@ function startReportDigestWorker(): Worker<ReportDigestJobData> {
   return worker;
 }
 
+function startMediaRetentionWorker(): Worker<MediaRetentionJobData> {
+  const env = getEnv();
+  const media = new MediaLibraryService({
+    store: prismaMediaStore(getPrisma()),
+    storage: getAssetStorage(),
+  });
+  const purgeDays = env.MEDIA_PURGE_DAYS > 0 ? env.MEDIA_PURGE_DAYS : null;
+
+  const worker = new Worker<MediaRetentionJobData>(
+    QUEUE_NAMES.mediaRetention,
+    async (job) => runMediaRetentionJob({ media, retentionDays: env.MEDIA_RETENTION_DAYS, purgeDays }, job.data),
+    { connection: redisConnection() },
+  );
+  worker.on("completed", (job) =>
+    logger.info("media retention completed", {
+      jobId: job.id,
+      archived: job.returnvalue?.archived,
+      purged: job.returnvalue?.purged,
+    }),
+  );
+  worker.on("failed", (job, err) =>
+    logger.error("media retention failed", { jobId: job?.id, message: err.message }),
+  );
+  return worker;
+}
+
 async function main() {
   startPublishWorker();
   startResearchWorker();
@@ -391,9 +421,12 @@ async function main() {
   startMetricsWorker();
   startSchedulerWorker();
   startReportDigestWorker();
-  // Install the repeatable heartbeats (P4-01 auto-publish, P4-07 report digest).
+  startMediaRetentionWorker();
+  // Install the repeatable heartbeats (P4-01 auto-publish, P4-07 report digest,
+  // P4-10 media retention).
   await registerSchedulerTick();
   const digestOn = await registerReportDigest();
+  const retentionOn = await registerMediaRetention();
   logger.info("worker started", {
     queues: [
       QUEUE_NAMES.publish,
@@ -404,6 +437,7 @@ async function main() {
       QUEUE_NAMES.fetchMetrics,
       QUEUE_NAMES.schedulerTick,
       ...(digestOn ? [QUEUE_NAMES.reportDigest] : []),
+      ...(retentionOn ? [QUEUE_NAMES.mediaRetention] : []),
     ],
   });
 }

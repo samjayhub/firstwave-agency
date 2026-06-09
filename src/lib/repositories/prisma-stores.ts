@@ -362,7 +362,7 @@ export function prismaMediaStore(prisma: PrismaClient): MediaStore {
       return res.count > 0;
     },
 
-    archiveStale: async (agencyId, clientId, before) => {
+    archiveStale: async (agencyId, clientId, before, at) => {
       const res = await prisma.asset.updateMany({
         where: {
           contentItem: {
@@ -373,10 +373,34 @@ export function prismaMediaStore(prisma: PrismaClient): MediaStore {
           source: { in: ["generated", "reused"] as AssetSource[] },
           createdAt: { lt: before },
         },
-        data: { archivedAt: before },
+        data: { archivedAt: at },
       });
       return res.count;
     },
+
+    findPurgeable: (agencyId, clientId, before) =>
+      prisma.asset.findMany({
+        where: {
+          archivedAt: { not: null, lt: before },
+          contentItem: { plan: { clientId, client: { agencyId } } },
+        },
+        select: { id: true, url: true },
+      }),
+
+    deleteAssets: async (agencyId, ids) => {
+      const res = await prisma.asset.deleteMany({
+        where: { id: { in: ids }, contentItem: ofAgency(agencyId) },
+      });
+      return res.count;
+    },
+
+    countByUrl: (agencyId, url) =>
+      prisma.asset.count({ where: { url, contentItem: ofAgency(agencyId) } }),
+
+    sweepTargets: () =>
+      prisma.client
+        .findMany({ select: { id: true, agencyId: true } })
+        .then((rows) => rows.map((r) => ({ agencyId: r.agencyId, clientId: r.id }))),
   };
 }
 

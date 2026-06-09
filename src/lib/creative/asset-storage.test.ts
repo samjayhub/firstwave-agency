@@ -11,6 +11,15 @@ describe("InMemoryAssetStorage", () => {
     expect(out.url).toBe("memory://a/b.png");
     expect(store.objects.get("a/b.png")?.bytes.toString()).toBe("hi");
   });
+
+  it("deletes by url, and ignores urls it does not own", async () => {
+    const store = new InMemoryAssetStorage();
+    await store.put("a/b.png", Buffer.from("hi"), "image/png");
+    await store.deleteByUrl("https://cdn.example.com/external.png"); // not ours → no-op
+    expect(store.objects.size).toBe(1);
+    await store.deleteByUrl("memory://a/b.png");
+    expect(store.objects.has("a/b.png")).toBe(false);
+  });
 });
 
 describe("LocalAssetStorage", () => {
@@ -28,6 +37,12 @@ describe("LocalAssetStorage", () => {
       expect(got?.bytes.toString()).toBe("PNGDATA");
       expect(got?.contentType).toBe("image/png");
       expect(await store.get("client1/item1/missing.png")).toBeNull();
+
+      // deleteByUrl removes the file; a second delete (already gone) is a no-op.
+      await store.deleteByUrl("/assets/client1/item1/x.png");
+      expect(await store.get("client1/item1/x.png")).toBeNull();
+      await store.deleteByUrl("/assets/client1/item1/x.png");
+      await store.deleteByUrl("https://external.example/y.png"); // not ours → no-op
     } finally {
       await rm(base, { recursive: true, force: true });
     }

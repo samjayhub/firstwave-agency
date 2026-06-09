@@ -1,7 +1,7 @@
 // AssetStorage implementations. LocalAssetStorage writes to a directory for MVP;
 // swap to an S3/R2-backed implementation later (same interface). InMemory is for
 // tests. URLs point at the tenant-checked streamer route (/api/assets/...).
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { ValidationError } from "@/lib/errors/app-error";
 import type { AssetStorage, StoredBytes, StoredObject } from "./types";
@@ -52,6 +52,16 @@ export class LocalAssetStorage implements AssetStorage {
       throw err;
     }
   }
+
+  async deleteByUrl(url: string): Promise<void> {
+    const prefix = `${this.urlPrefix}/`;
+    if (!url.startsWith(prefix)) return; // not ours (e.g. an external upload)
+    try {
+      await unlink(this.safePath(url.slice(prefix.length)));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+  }
 }
 
 export class InMemoryAssetStorage implements AssetStorage {
@@ -64,5 +74,11 @@ export class InMemoryAssetStorage implements AssetStorage {
 
   async get(key: string): Promise<StoredBytes | null> {
     return this.objects.get(key) ?? null;
+  }
+
+  async deleteByUrl(url: string): Promise<void> {
+    const prefix = "memory://";
+    if (!url.startsWith(prefix)) return;
+    this.objects.delete(url.slice(prefix.length));
   }
 }

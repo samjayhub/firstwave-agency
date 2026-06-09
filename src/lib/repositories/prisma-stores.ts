@@ -1,7 +1,7 @@
 // Prisma-backed implementations of the repository store interfaces. Kept apart
 // from the repository logic so tests never import PrismaClient. The `select`
 // pins the returned shape to the record type the repository expects.
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { AssetKind, AssetSource, Prisma, PrismaClient } from "@prisma/client";
 import { NotFoundError } from "@/lib/errors/app-error";
 import type { ClientStore } from "./client-repository";
 import type { AuthStore } from "@/lib/auth/auth-service";
@@ -35,6 +35,7 @@ import type { PerformanceStore } from "@/lib/performance/types";
 import type { ReviewStore } from "@/lib/review/types";
 import type { NotificationKind, NotificationStore } from "@/lib/notifications/types";
 import type { ComplianceConfig, ComplianceStore } from "@/lib/compliance/types";
+import { RETAINED_STATUSES, type MediaAsset, type MediaStore } from "@/lib/media/types";
 import type { ReportStore } from "@/lib/reporting/types";
 import type { ApiKeyStore } from "@/lib/api-keys";
 import type { WebhookEvent, WebhookStore } from "@/lib/webhooks";
@@ -214,6 +215,7 @@ export function prismaAssetRepository(prisma: PrismaClient): AssetRepository {
             kind: input.kind,
             url: input.url,
             source: input.source,
+            contentHash: input.contentHash ?? null,
             meta: (input.meta ?? undefined) as Prisma.InputJsonValue | undefined,
           },
           select: ASSET_SELECT,
@@ -225,6 +227,156 @@ export function prismaAssetRepository(prisma: PrismaClient): AssetRepository {
         orderBy: { createdAt: "desc" },
         select: ASSET_SELECT,
       }),
+    findByHash: (agencyId, clientId, contentHash) =>
+      prisma.asset.findFirst({
+        where: { contentHash, contentItem: { plan: { clientId, client: { agencyId } } } },
+        select: { id: true, url: true },
+      }),
+  };
+}
+
+const MEDIA_ASSET_SELECT = {
+  id: true,
+  contentItemId: true,
+  kind: true,
+  url: true,
+  source: true,
+  contentHash: true,
+  groupId: true,
+  version: true,
+  archivedAt: true,
+  createdAt: true,
+} as const;
+
+function toMediaAsset(r: {
+  id: string;
+  contentItemId: string | null;
+  kind: AssetKind;
+  url: string;
+  source: AssetSource;
+  contentHash: string | null;
+  groupId: string | null;
+  version: number;
+  archivedAt: Date | null;
+  createdAt: Date;
+}): MediaAsset {
+  return { ...r, kind: r.kind, source: r.source };
+}
+
+export function prismaMediaStore(prisma: PrismaClient): MediaStore {
+  // All queries scope through Asset → ContentItem → ContentPlan → Client → Agency.
+  const ofAgency = (agencyId: string) => ({ plan: { client: { agencyId } } });
+  const groupWhere = (agencyId: string, groupId: string) => ({
+    contentItem: ofAgency(agencyId),
+    OR: [{ groupId }, { id: groupId }],
+  });
+  return {
+    listForClient: (agencyId, clientId, filter) =>
+      prisma.asset
+        .findMany({
+          where: {
+            contentItem: { plan: { clientId, client: { agencyId } } },
+            ...(filter.kind ? { kind: filter.kind as AssetKind } : {}),
+            ...(filter.source ? { source: filter.source as AssetSource } : {}),
+            ...(filter.includeArchived ? {} : { archivedAt: null }),
+          },
+          orderBy: { createdAt: "desc" },
+          select: MEDIA_ASSET_SELECT,
+        })
+        .then((rows) => rows.map(toMediaAsset)),
+
+    getForAgency: async (agencyId, assetId) => {
+      const row = await prisma.asset.findFirst({
+        where: { id: assetId, contentItem: ofAgency(agencyId) },
+        select: {
+          ...MEDIA_ASSET_SELECT,
+          contentItem: { select: { plan: { select: { clientId: true } } } },
+        },
+      });
+      if (!row || !row.contentItem) return null;
+      const { contentItem, ...rest } = row;
+      return { ...toMediaAsset(rest), clientId: contentItem.plan.clientId };
+    },
+
+    itemClient: async (agencyId, itemId) => {
+      const row = await prisma.contentItem.findFirst({
+        where: { id: itemId, plan: { client: { agencyId } } },
+        select: { plan: { select: { clientId: true } } },
+      });
+      return row ? { clientId: row.plan.clientId } : null;
+    },
+
+    createReattached: (agencyId, input) =>
+      prisma
+        .$transaction(async (tx) => {
+          const item = await tx.contentItem.findFirst({
+            where: { id: input.contentItemId, plan: { client: { agencyId } } },
+            select: { id: true },
+          });
+          if (!item) throw new NotFoundError("Content item not found");
+          return tx.asset.create({
+            data: {
+              contentItemId: input.contentItemId,
+              kind: input.kind as AssetKind,
+              url: input.url,
+              source: "reused",
+              contentHash: input.contentHash,
+              groupId: input.groupId,
+              version: input.version,
+              meta: input.meta as Prisma.InputJsonValue,
+            },
+            select: MEDIA_ASSET_SELECT,
+          });
+        })
+        .then(toMediaAsset),
+
+    anchorGroup: async (agencyId, assetId, groupId) => {
+      await prisma.asset.updateMany({
+        where: { id: assetId, groupId: null, contentItem: ofAgency(agencyId) },
+        data: { groupId },
+      });
+    },
+
+    nextVersion: async (agencyId, groupId) => {
+      const agg = await prisma.asset.aggregate({
+        where: groupWhere(agencyId, groupId),
+        _max: { version: true },
+      });
+      return (agg._max.version ?? 0) + 1;
+    },
+
+    listVersions: (agencyId, groupId) =>
+      prisma.asset
+        .findMany({
+          where: groupWhere(agencyId, groupId),
+          orderBy: { version: "asc" },
+          select: MEDIA_ASSET_SELECT,
+        })
+        .then((rows) => rows.map(toMediaAsset)),
+
+    setArchived: async (agencyId, assetId, archived) => {
+      const res = await prisma.asset.updateMany({
+        where: { id: assetId, contentItem: ofAgency(agencyId) },
+        data: { archivedAt: archived ? new Date() : null },
+      });
+      return res.count > 0;
+    },
+
+    archiveStale: async (agencyId, clientId, before) => {
+      const res = await prisma.asset.updateMany({
+        where: {
+          contentItem: {
+            plan: { clientId, client: { agencyId } },
+            status: { notIn: RETAINED_STATUSES as ItemStatus[] },
+          },
+          archivedAt: null,
+          source: { in: ["generated", "reused"] as AssetSource[] },
+          createdAt: { lt: before },
+        },
+        data: { archivedAt: before },
+      });
+      return res.count;
+    },
   };
 }
 

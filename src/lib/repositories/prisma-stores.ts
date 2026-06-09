@@ -28,6 +28,7 @@ import type { CompetitorBrief, CompetitorStore } from "@/lib/competitor/types";
 import type { TrendBrief, TrendStore } from "@/lib/trend/types";
 import type { AnalyticsStore, PostMetrics } from "@/lib/analytics/types";
 import type { BillingStore } from "@/lib/billing/types";
+import type { BrandingStore } from "@/lib/whitelabel/types";
 
 const CLIENT_SELECT = {
   id: true,
@@ -587,6 +588,31 @@ export function prismaBillingStore(prisma: PrismaClient): BillingStore {
         create: { agencyId, ...patch },
         update: patch,
         select: SUBSCRIPTION_SELECT,
+      }),
+  };
+}
+
+const BRANDING_SELECT = {
+  agencyId: true,
+  brandName: true,
+  logoUrl: true,
+  primaryColor: true,
+  supportEmail: true,
+  customDomain: true,
+} as const;
+
+export function prismaBrandingStore(prisma: PrismaClient): BrandingStore {
+  return {
+    getByAgency: (agencyId) =>
+      prisma.agencyBranding.findUnique({ where: { agencyId }, select: BRANDING_SELECT }),
+    getByCustomDomain: (domain) =>
+      prisma.agencyBranding.findUnique({ where: { customDomain: domain }, select: BRANDING_SELECT }),
+    upsertByAgency: (agencyId, patch) =>
+      prisma.agencyBranding.upsert({
+        where: { agencyId },
+        create: { agencyId, ...patch },
+        update: patch,
+        select: BRANDING_SELECT,
       }),
   };
 }

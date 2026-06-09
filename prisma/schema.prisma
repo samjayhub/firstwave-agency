@@ -14,13 +14,31 @@ datasource db {
 
 // ── Tenancy ────────────────────────────────────────────────
 model Agency {
-  id           String        @id @default(cuid())
+  id           String          @id @default(cuid())
   name         String
   users        User[]
   clients      Client[]
   aiAuditLogs  AiAuditLog[]
   subscription Subscription?
-  createdAt    DateTime      @default(now())
+  branding     AgencyBranding?
+  createdAt    DateTime        @default(now())
+}
+
+// ── White-label (P3-06) ────────────────────────────────────
+// Agency-level branding applied to client-facing surfaces (the shareable
+// reviewer view, outbound emails). One row per agency; absent == platform
+// defaults. Every field optional so an agency themes only what it wants.
+model AgencyBranding {
+  id           String   @id @default(cuid())
+  agencyId     String   @unique
+  agency       Agency   @relation(fields: [agencyId], references: [id])
+  brandName    String?
+  logoUrl      String?
+  primaryColor String? // hex e.g. #4F46E5
+  supportEmail String?
+  customDomain String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ── Billing (P3-05) ────────────────────────────────────────
